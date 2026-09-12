@@ -1,11 +1,15 @@
+import hashlib
 import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import ml.popularity as popularity
 
 from ml.popularity import (
+    CELLS_PATH,
+    MODEL_PATH,
     enrich_cell_collection,
     model_info,
     popularity_available,
@@ -30,6 +34,19 @@ def test_cell_enrichment_is_optional_when_local_artifacts_are_absent(monkeypatch
     assert enriched is not cells
     with pytest.raises(FileNotFoundError, match="runtime artifacts"):
         enrich_cell_collection(cells, {"cuisines": ["korean"], "price_tier": 2}, required=True)
+
+
+@requires_local_artifact
+def test_local_artifact_hashes_and_h3_coverage_match_metadata():
+    metadata = model_info()
+    for path in (MODEL_PATH, CELLS_PATH):
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert actual == metadata["artifact_sha256"][path.name]
+
+    cells = pd.read_parquet(CELLS_PATH, columns=["h3", "tract_geoid"])
+    assert len(cells) == metadata["h3_rows"] == 18_275
+    assert cells.h3.is_unique
+    assert cells.tract_geoid.notna().all()
 
 
 @requires_local_artifact
