@@ -91,6 +91,18 @@ def cells_from_activity(pa: pd.DataFrame, places: pd.DataFrame, cells: pd.DataFr
     return out.reset_index()
 
 
+def write_place_activity_db(pa: pd.DataFrame) -> None:
+    """Stage then move into the real `place_activity` table, so its declared PK/FK constraints
+    survive the write instead of being dropped by write_table's default if_exists='replace'."""
+    from sqlalchemy import text
+    common.write_table(pa, "place_activity_stage")
+    with common.engine().begin() as con:
+        con.execute(text("DELETE FROM place_activity"))
+        con.execute(text("""INSERT INTO place_activity (place_id, daypart, busyness)
+                            SELECT place_id, daypart, busyness FROM place_activity_stage"""))
+        con.execute(text("DROP TABLE place_activity_stage"))
+
+
 def main():
     args = common.cli(__doc__)
     places = common.load("places")
@@ -117,7 +129,7 @@ def main():
     common.save(pa, "place_activity")
     common.save(cells_from_activity(pa, places, cells, proxy), "activity_cells")
     if not args.no_db and len(pa):
-        common.write_table(pa, "place_activity")
+        write_place_activity_db(pa)
     print(f"besttime: {pa.place_id.nunique()} venues with real data")
 
 

@@ -178,6 +178,18 @@ def cell_metrics(pois: pd.DataFrame, cells: pd.DataFrame, roads_h3: set, gtfs_tr
     return out.reset_index()
 
 
+def write_suppliers_db(df: pd.DataFrame) -> None:
+    """Stage then move into the real `suppliers` table, so its declared PK/NOT NULL constraints
+    survive the write instead of being dropped by write_table's default if_exists='replace'."""
+    from sqlalchemy import text
+    common.write_table(df, "suppliers_stage")
+    with common.engine().begin() as con:
+        con.execute(text("DELETE FROM suppliers"))
+        con.execute(text("""INSERT INTO suppliers (id, name, supplier_type, lat, lng, h3, source)
+                            SELECT id, name, supplier_type, lat, lng, h3, source FROM suppliers_stage"""))
+        con.execute(text("DROP TABLE suppliers_stage"))
+
+
 def main():
     args = common.cli(__doc__)
     pois = pois_df(overpass("pois"))
@@ -198,7 +210,7 @@ def main():
     sup = pois[pois.kind.isin(SUPPLIERS)].rename(columns={"kind": "supplier_type"})
     common.save(sup[["id", "name", "supplier_type", "lat", "lng", "h3", "source"]], "suppliers")
     if not args.no_db:
-        common.write_table(common.load("suppliers"), "suppliers")
+        write_suppliers_db(common.load("suppliers"))
     print(f"osm: {len(pois)} pois, {pois.kind.value_counts().to_dict()}")
 
 
