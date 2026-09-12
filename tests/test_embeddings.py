@@ -112,3 +112,111 @@ def test_fetch_embeddings_returns_all_ids_when_nothing_fails(tmp_path):
     cache_file = tmp_path / "embeddings.jsonl"
     done = e.fetch_embeddings(todo, FakeClient(), config=None, cache_file=cache_file, batch=100)
     assert set(done.keys()) == {"a", "b"}
+
+
+def _quota_error(quota_id, retry_delay=None):
+    """Build an APIError shaped like Google's real 429 body: a QuotaFailure detail carrying
+    quotaId, and (for a per-minute limit) a RetryInfo detail carrying retryDelay."""
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                "violations": [{"quotaId": quota_id, "quotaValue": "100"}]}]
+    if retry_delay is not None:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay})
+    return errors.APIError(429, {"error": {"message": "quota exceeded", "status": "RESOURCE_EXHAUSTED",
+                                            "details": details}})
+
+
+def test_fetch_embeddings_retries_a_per_minute_rate_limit_and_continues(tmp_path):
+    """A per-minute rate limit (quotaId ends in PerMinute..., carries a retryDelay) is transient:
+    the real fix must sleep for the server's retryDelay and retry the same batch rather than
+    giving up, so a run that hits it makes progress instead of stopping at 0."""
+    e = load_script("08_place_embeddings")
+    todo = pd.DataFrame({"id": ["a", "b"], "name": ["A", "B"],
+                        "categories": [np.array(["x"]), np.array(["y"])], "summary": ["", ""]})
+    calls = []
+    sleeps = []
+
+    def fake_embed_content(model, contents, config):
+        calls.append(contents)
+        if len(calls) == 1:
+            raise _quota_error("EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier",
+                                retry_delay="40s")
+        return _FakeResponse(len(contents))
+
+    class FakeModels:
+        embed_content = staticmethod(fake_embed_content)
+
+    class FakeClient:
+        models = FakeModels()
+
+    cache_file = tmp_path / "embeddings.jsonl"
+    done = e.fetch_embeddings(todo, FakeClient(), config=None, cache_file=cache_file, batch=100,
+                               sleep=sleeps.append)
+
+    assert set(done.keys()) == {"a", "b"}  # the batch that hit the rate limit was retried
+    assert len(calls) == 2  # one failed attempt, one retry that succeeded
+    assert sleeps == [40.0]  # slept for the server's retryDelay, not a made-up default
+
+
+def test_fetch_embeddings_stops_on_a_daily_quota_and_keeps_what_it_has(tmp_path):
+    """A daily/terminal quota (quotaId has no PerMinute window, no retryDelay to retry against)
+    must still stop immediately and keep whatever batches already succeeded -- the deliberate
+    behavior from the earlier fix, which this change must not disturb."""
+    e = load_script("08_place_embeddings")
+    todo = pd.DataFrame({"id": ["a", "b", "c"], "name": ["A", "B", "C"],
+                        "categories": [np.array(["x"]), np.array(["y"]), np.array(["z"])],
+                        "summary": ["", "", ""]})
+    calls = []
+
+    def fake_embed_content(model, contents, config):
+        calls.append(contents)
+        if len(calls) == 2:
+            raise _quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        return _FakeResponse(len(contents))
+
+    class FakeModels:
+        embed_content = staticmethod(fake_embed_content)
+
+    class FakeClient:
+        models = FakeModels()
+
+    def _no_sleep(_):
+        raise AssertionError("a daily quota must not sleep/retry")
+
+    cache_file = tmp_path / "embeddings.jsonl"
+    done = e.fetch_embeddings(todo, FakeClient(), config=None, cache_file=cache_file, batch=1,
+                               sleep=_no_sleep)
+
+    assert list(done.keys()) == ["a"]  # batch "b" hit the daily cap and stopped the fetch
+    assert len(calls) == 2  # "c" was never attempted
+
+
+def test_fetch_embeddings_caps_consecutive_rate_limit_retries(tmp_path):
+    """A rate limit that never clears (server keeps returning 429 for the same batch) must not
+    spin forever -- after MAX_RATE_LIMIT_RETRIES consecutive retries it falls through to the
+    terminal path and keeps what was already fetched."""
+    e = load_script("08_place_embeddings")
+    todo = pd.DataFrame({"id": ["a", "b"], "name": ["A", "B"],
+                        "categories": [np.array(["x"]), np.array(["y"])], "summary": ["", ""]})
+    calls = []
+    sleeps = []
+
+    def fake_embed_content(model, contents, config):
+        calls.append(contents)
+        if len(calls) == 1:
+            return _FakeResponse(len(contents))
+        raise _quota_error("EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier",
+                            retry_delay="1s")
+
+    class FakeModels:
+        embed_content = staticmethod(fake_embed_content)
+
+    class FakeClient:
+        models = FakeModels()
+
+    cache_file = tmp_path / "embeddings.jsonl"
+    done = e.fetch_embeddings(todo, FakeClient(), config=None, cache_file=cache_file, batch=1,
+                               sleep=sleeps.append)
+
+    assert list(done.keys()) == ["a"]  # "b" retried repeatedly but never got through
+    assert len(calls) == 1 + 1 + e.MAX_RATE_LIMIT_RETRIES  # "a" once, "b" attempted + all retries
+    assert len(sleeps) == e.MAX_RATE_LIMIT_RETRIES
