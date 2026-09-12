@@ -319,6 +319,13 @@
   .legend .dots i { border-radius: 50%; display: inline-block; }
   .legend .lr { display: flex; justify-content: space-between; }
   .disclaimer { bottom: 20px; right: 18px; padding: 10px 15px; font-size: 10.5px; color: var(--sub); }
+  .view-toggle {
+    bottom: 58px; right: 18px; width: 44px; height: 44px; border-radius: 50%;
+    font: 800 12.5px var(--sans); color: var(--ink); cursor: pointer; border: 1px solid var(--line);
+    transition: transform .18s var(--spring);
+  }
+  .view-toggle:hover { transform: translateY(-2px); }
+  .view-toggle.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
   .disclaimer b { color: var(--accent-deep); font-weight: 700; }
 
   /* markers */
@@ -513,6 +520,8 @@
   </div>
 
   <div class="panel disclaimer" id="disclaimer"><b>PROTOTYPE</b> · waiting for analysis</div>
+
+  <button class="panel view-toggle" id="viewToggle" onclick="toggle3D()" title="Tilt the map">3D</button>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -687,6 +696,12 @@ function distToPathKm(lat, lng, path) {
   let best = 1e9;
   for (const [plng, plat] of path) best = Math.min(best, km([lat, lng], [plat, plng]));
   return best;
+}
+function splitRivals(list, concept) {
+  const cuisines = conceptCuisines(concept);
+  const direct = list.filter(p => cuisines.includes(p.cuisine_key));
+  const indirect = list.filter(p => !cuisines.includes(p.cuisine_key)).slice(0, Math.max(0, 14 - direct.length));
+  return { direct, indirect, all: [...direct, ...indirect] };
 }
 function realRivals(st, concept) {
   const cuisines = conceptCuisines(concept);
@@ -950,16 +965,65 @@ function updateAnalyzeState() {
 }
 
 /* ============ Gemini — parses concepts and narrates numbers; NEVER ranks ============ */
-let GEMINI_KEY = null;
+let GEMINI_KEY = null, PLACES_KEY = null;
 fetch('/.env').then(r => (r.ok ? r.text() : ''))
   .then(t => {
-    const m = [...t.matchAll(/^GEMINI_API_KEY=(.+)$/gm)].map(x => x[1].trim()).filter(Boolean).pop();
-    if (m) GEMINI_KEY = m;
+    const pick = re => [...t.matchAll(re)].map(x => x[1].trim()).filter(Boolean).pop() || null;
+    GEMINI_KEY = pick(/^GEMINI_API_KEY\s*=\s*(.+)$/gm);
+    PLACES_KEY = pick(/^GOOGLE_PLACES_API_KEY\s*=\s*(.+)$/gm);
   }).catch(() => {});
+
+/* 2D / 3D view toggle */
+let pitched = false;
+function toggle3D() {
+  pitched = !pitched;
+  map.easeTo({ pitch: pitched ? 55 : 0, bearing: pitched ? -12 : 0, duration: 650 });
+  const b = document.getElementById('viewToggle');
+  b.textContent = pitched ? '2D' : '3D';
+  b.classList.toggle('on', pitched);
+}
+
+/* Google Places API (New) — LIVE verification of rivals on the selected street */
+const GTYPE_MAP = {
+  pizza_restaurant: 'pizza', korean_restaurant: 'korean', japanese_restaurant: 'japanese',
+  ramen_restaurant: 'japanese', sushi_restaurant: 'japanese', chinese_restaurant: 'chinese',
+  thai_restaurant: 'thai', indian_restaurant: 'indian', mexican_restaurant: 'mexican',
+  italian_restaurant: 'italian', american_restaurant: 'american', fast_food_restaurant: 'american',
+  hamburger_restaurant: 'american', cafe: 'cafe', coffee_shop: 'cafe', bakery: 'bakery',
+  bar: 'bar', wine_bar: 'wine_bar', ice_cream_shop: 'dessert_ice_cream', dessert_shop: 'dessert_ice_cream',
+  sandwich_shop: 'sandwich_deli', breakfast_restaurant: 'breakfast_brunch', brunch_restaurant: 'breakfast_brunch',
+};
+async function liveRivals(st) {
+  if (!PLACES_KEY) return null;
+  try {
+    const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': PLACES_KEY,
+        'X-Goog-FieldMask': 'places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.businessStatus',
+      },
+      body: JSON.stringify({
+        includedTypes: ['restaurant', 'cafe', 'bakery', 'bar', 'meal_takeaway', 'ice_cream_shop'],
+        maxResultCount: 20,
+        locationRestriction: { circle: { center: { latitude: st.mid[1], longitude: st.mid[0] }, radius: 350 } },
+      }),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j.places || [])
+      .filter(p => p.businessStatus !== 'CLOSED_PERMANENTLY' && p.location)
+      .map(p => ({
+        name: p.displayName?.text || '?', lat: p.location.latitude, lng: p.location.longitude,
+        cuisine_key: GTYPE_MAP[p.primaryType] || (p.types || []).map(t => GTYPE_MAP[t]).find(Boolean) || 'unknown',
+        rating: p.rating || null, reviews: p.userRatingCount || null, live: true,
+      }));
+  } catch { return null; }
+}
 const withTimeout = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]);
 
 async function geminiCall(body) {
-  for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+  for (const model of ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']) {
     try {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
@@ -1382,6 +1446,19 @@ function openWhy(i) {
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
   });
+  // LIVE Google Places verification of the competitor count on this street
+  liveRivals(st).then(list => {
+    if (!list || selectedStreet !== i) return;
+    st.liveRivals = list;
+    const direct = splitRivals(list, concept).direct;
+    const row = [...wrap.querySelectorAll('.metric')].find(m => m.textContent.includes('Direct competitors'));
+    if (row) {
+      row.querySelector('.v').textContent = direct.length === 0 ? 'none' : direct.length;
+      const lb = row.querySelector('.lb span');
+      if (lb) lb.textContent = `· verified LIVE · ${list.length} places checked (Google)`;
+    }
+  });
+
   // Gemini narrates the computed numbers (never invents, never ranks)
   geminiNarrateWhy(st, Object.fromEntries(M.map(([l, v]) => [l, v]))).then(txt => {
     if (!txt || selectedStreet !== i) return;
@@ -1569,7 +1646,9 @@ function enterFocus(key) {
   focusCache = {
     trips,
     heatPoints: trips ? trips.flatMap(p => p.path.map(q => ({ p: q }))) : null,
-    rivals: key === 'comp' ? realRivals(st, concept) : null,
+    rivals: key === 'comp'
+      ? (st.liveRivals ? splitRivals(st.liveRivals, concept) : realRivals(st, concept))
+      : null,
     dots: key === 'students' ? studentDots() : null,
     tethers: key === 'students' ? UNIS.map(u => ({ s: [u[1], u[0]], d: st.mid })) : null,
   };
@@ -1590,7 +1669,10 @@ function enterFocus(key) {
   map.fitBounds(
     [[Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]],
     { padding: { left: 320, right: 80, top: 100, bottom: 60 }, duration: 800 });
-  setTimeout(() => { if (focusVar === 'spend') map.easeTo({ pitch: 50, duration: 600 }); }, 850);
+  setTimeout(() => {
+    if (!focusVar) return;
+    map.easeTo({ pitch: focusVar === 'spend' ? 50 : (pitched ? 55 : 0), duration: 600 });
+  }, 850);
   if (focusRaf) cancelAnimationFrame(focusRaf);
   const loop = () => {
     if (!focusVar) return;
@@ -1606,7 +1688,7 @@ function exitFocus() {
   if (focusRaf) { cancelAnimationFrame(focusRaf); focusRaf = null; }
   clearEvMarkers();
   try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0); } catch {}
-  if (map.getPitch() > 0) map.easeTo({ pitch: 0, duration: 400 });
+  map.easeTo({ pitch: pitched ? 55 : 0, duration: 400 });
   document.getElementById('focusChip').style.display = 'none';
   if (selectedStreet !== null) { openWhy(selectedStreet); return; }
   render();
@@ -1757,8 +1839,8 @@ function render() {
       getTooltip: ({ object, layer }) => {
         if (!object || !layer || layer.id !== 'focus-comp-dots') return null;
         const stars = object.rating ? ` · ★${(+object.rating).toFixed(1)}` : '';
-        const cui = object.cuisine_key ? ` · ${object.cuisine_key.replace(/_/g, ' ')}` : '';
-        return { text: `${object.name}${cui}${stars}` };
+        const cui = object.cuisine_key && object.cuisine_key !== 'unknown' ? ` · ${object.cuisine_key.replace(/_/g, ' ')}` : '';
+        return { text: `${object.name}${cui}${stars}${object.live ? ' · LIVE Google' : ''}` };
       },
     });
     return;
