@@ -11,6 +11,10 @@ from ingest import common
 YEAR = 2023
 BG_SHP_URL = f"https://www2.census.gov/geo/tiger/TIGER{YEAR}/BG/tl_{YEAR}_42_bg.zip"
 
+JAM_VALUE_MAX = -222222222  # Census ACS jam values (e.g. -666666666: "estimate not available") are
+# large negative sentinels, distinct from any real count/dollar/person value; anything at or below
+# the smallest defined jam value (-222222222) is a sentinel, not data.
+
 AGE_M = {"18_24": ["007", "008", "009", "010"], "25_34": ["011", "012"],
          "35_54": ["013", "014", "015", "016"], "55p": [f"{i:03d}" for i in range(17, 26)]}
 AGE_F = {k: [f"{int(v) + 24:03d}" for v in vs] for k, vs in AGE_M.items()}
@@ -43,7 +47,11 @@ def _merge_chunks(chunks: list[list[list[str]]]) -> list[list[str]]:
             merged = d
         else:
             value_cols = [c for c in d.columns if c not in GEO_COLS]
+            before = len(merged)
             merged = merged.merge(d[GEO_COLS + value_cols], on=GEO_COLS, how="inner")
+            assert len(merged) == before, (
+                f"_merge_chunks: inner join dropped rows ({before} -> {len(merged)}); "
+                "a short chunk would otherwise silently drop block groups into the cache")
     return [list(merged.columns)] + merged.values.tolist()
 
 
@@ -64,7 +72,8 @@ def fetch() -> pd.DataFrame:
     df = pd.DataFrame(rows[1:], columns=rows[0])
     df["GEOID"] = df["state"] + df["county"] + df["tract"] + df["block group"]
     for v in VARS:
-        df[v] = pd.to_numeric(df[v], errors="coerce").clip(lower=0)
+        n = pd.to_numeric(df[v], errors="coerce")
+        df[v] = n.mask(n <= JAM_VALUE_MAX).clip(lower=0)
     return df
 
 

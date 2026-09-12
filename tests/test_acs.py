@@ -1,4 +1,7 @@
+import json
+
 import pandas as pd
+import pytest
 
 from tests.conftest import load_script
 
@@ -31,6 +34,21 @@ def test_chunks_splits_long_var_list_under_census_cap():
     assert [v for c in chunks for v in c] == long_vars  # nothing dropped or reordered
 
 
+def test_fetch_masks_jam_sentinel_to_nan_not_zero(monkeypatch, tmp_path):
+    """Census's -666666666 ("estimate not available") must become NaN, not be clipped to a
+    plausible $0 by clip(lower=0) -- the headline defect this fix removes."""
+    acs = load_script("01_census_acs")
+    monkeypatch.setattr(acs.common, "RAW", tmp_path)
+    header = acs.VARS + acs.GEO_COLS
+    row = ["-666666666" if v == "B19013_001E" else "5" for v in acs.VARS] + ["42", "003", "010100", "1"]
+    path = tmp_path / "acs" / "bg_2023.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps([header, row]))
+    df = acs.fetch()
+    assert pd.isna(df["B19013_001E"].iloc[0])
+    assert df["B01003_001E"].iloc[0] == 5  # a real value elsewhere in the same row is untouched
+
+
 def test_merge_chunks_combines_variables_one_row_per_block_group():
     acs = load_script("01_census_acs")
     geo = ["state", "county", "tract", "block group"]
@@ -47,3 +65,17 @@ def test_merge_chunks_combines_variables_one_row_per_block_group():
     assert {"B01_001E", "B02_001E"}.issubset(df.columns)
     row1 = df[df["block group"] == "1"].iloc[0]
     assert row1["B01_001E"] == "10" and row1["B02_001E"] == "30"
+
+
+def test_merge_chunks_asserts_on_row_count_drop():
+    """A structurally valid but short chunk (missing a block group) must fail loudly, not
+    silently drop rows into a cached, trusted file via the inner join."""
+    acs = load_script("01_census_acs")
+    geo = ["state", "county", "tract", "block group"]
+    chunk1 = [["B01_001E", *geo],
+              ["10", "42", "003", "100", "1"],
+              ["20", "42", "003", "100", "2"]]
+    chunk2 = [["B02_001E", *geo],
+              ["30", "42", "003", "100", "1"]]  # missing block group "2"
+    with pytest.raises(AssertionError, match="dropped rows"):
+        acs._merge_chunks([chunk1, chunk2])

@@ -69,11 +69,19 @@ def area_weight(src: gpd.GeoDataFrame, cells: gpd.GeoDataFrame,
         out[col] = inter[col] * inter["_ia"] / inter["_src_area"]
     for col in intensive:
         out[col] = inter[col] * inter["_ia"]
+        # Per-column intersection area, counting only rows where this column has a value: a NaN
+        # source value (e.g. a Census jam sentinel) must drop its own intersection area from the
+        # denominator too, or Series.sum()'s skipna dilutes the weighted average toward zero
+        # instead of leaving the cell NaN when its only source for this column is unmeasured.
+        out[f"_ia_{col}"] = inter["_ia"].where(inter[col].notna())
     out["_ia"] = inter["_ia"]
     g = out.groupby("h3")
     res = g[extensive].sum() if extensive else pd.DataFrame(index=g.size().index)
     for col in intensive:
-        res[col] = g[col].sum() / g["_ia"].sum()
+        # A group summing to 0 area means every source row for this column was NaN (e.g. all jam
+        # values); mask the denominator to NaN there so the division yields NaN, not a 0/0 warning.
+        den = g[f"_ia_{col}"].sum().replace(0.0, float("nan"))
+        res[col] = g[col].sum() / den
     return res.reset_index()
 
 
