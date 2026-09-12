@@ -46,6 +46,12 @@ def join_all(parts: dict[str, pd.DataFrame], cells: pd.DataFrame, places: pd.Dat
     open_counts = places[places.is_open].groupby("h3").size()
     df["restaurants_open"] = common.disk_sum(open_counts.reindex(df.h3, fill_value=0.0), 1).values
     for c in NUMERIC:
+        backing_part = PART_OF.get(c)
+        if backing_part is not None and backing_part not in parts:
+            # The whole part backing this column was never joined (e.g. rent.parquet absent) --
+            # that's unmeasured, not a real zero, so leave it NaN rather than fabricate a value.
+            df[c] = float("nan")
+            continue
         if c not in df:
             df[c] = 0.0
         df[c] = df[c].fillna(DIST_FILL if c.startswith("dist_to_") else 0.0).astype(float)
@@ -77,7 +83,10 @@ def main():
     common.save(df, "cell_features")
     if not args.no_db:
         num_cols = NUMERIC + [f"{c}_pct" for c in NUMERIC]
-        rows = [{"h3": r.h3, "features": json.dumps({c: float(r[c]) for c in num_cols}),
+        # NaN (a genuinely unmeasured column, e.g. est_rent_psf_yr with no rent part joined) is not
+        # valid JSON -- json.dumps would emit the literal token NaN, which postgres's jsonb parser
+        # rejects. Serialize it as JSON null instead, so the absence is honest there too.
+        rows = [{"h3": r.h3, "features": json.dumps({c: (None if pd.isna(r[c]) else float(r[c])) for c in num_cols}),
                  "cuisine_affinity": json.dumps(r.cuisine_affinity),
                  "activity_by_daypart": json.dumps({d.removeprefix("activity_"): float(r[d]) for d in ACTIVITY}),
                  "traffic_source": r.traffic_source, "rent_source": r.rent_source, "rent_resolution": r.rent_resolution,

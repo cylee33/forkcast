@@ -27,3 +27,24 @@ def test_join_and_percentiles_cover_contract_columns():
         assert f"{col}_pct" in df.columns, col
         assert df[f"{col}_pct"].between(0, 100).all()
     assert not df[b.NUMERIC].isna().any().any()
+
+
+def test_join_leaves_column_nan_when_backing_part_is_entirely_absent():
+    """rent.parquet does not exist in production, so `parts` never gets a "rent" key at all.
+    est_rent_psf_yr must come back NaN (unmeasured), not 0.0 (a fabricated free-rent value)."""
+    b = load_script("12_build_features")
+    cells = _cells()
+    parts = {name: pd.DataFrame({"h3": cells.h3}) for name in
+             ["acs", "lodes", "osm_cells", "activity_cells", "spend", "affinity"]}
+    for col, part_name in b.PART_OF.items():
+        if part_name in parts:
+            parts[part_name][col] = [1.0, 2.0, 3.0]
+    parts["activity_cells"]["traffic_source"] = "proxy"
+    parts["affinity"]["cuisine_affinity"] = [{"korean": 50.0}] * 3
+    places = pd.DataFrame({"h3": [cells.h3[0]], "is_open": [True]})
+    df = b.add_percentiles(b.join_all(parts, cells, places))
+    assert df["est_rent_psf_yr"].isna().all()
+    assert df["est_rent_psf_yr_pct"].isna().all()
+    # a present part's values (including a real zero for no anchor nearby) must still be filled, not left NaN
+    assert df["anchor_university"].notna().all()
+    assert list(df["anchor_university"]) == [1.0, 2.0, 3.0]
