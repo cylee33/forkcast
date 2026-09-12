@@ -234,7 +234,17 @@
   .reverse-hint { font-size: 13px; color: var(--sub); line-height: 1.6; }
   .rev-result { display: none; }
   .rev-addr { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 4px 0 2px; }
-  .rev-sub { font-size: 11.5px; color: var(--sub); margin-bottom: 12px; }
+  .rev-sub { font-size: 11.5px; color: var(--sub); margin-bottom: 8px; }
+  .rev-stats {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+  }
+  .rev-stats span {
+    font: 600 11px var(--sans); color: var(--ink); background: var(--surface-2);
+    border-radius: 999px; padding: 4px 10px;
+  }
+  .fit-row { cursor: pointer; }
+  .fit-row.active { background: var(--accent-soft); }
+  .fit-row.active .rs::after { content: " · shown on map"; color: var(--accent-deep); font-weight: 700; }
   .fit-row {
     display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center;
     padding: 10px 8px; border-radius: var(--r-md); cursor: default;
@@ -492,6 +502,8 @@
     <div class="rev-result" id="revResult">
       <div class="rev-addr" id="revAddr">—</div>
       <div class="rev-sub" id="revSub">—</div>
+      <div class="rev-stats" id="revStats"></div>
+      <div id="revNote"></div>
       <div id="fitList"></div>
     </div>
   </div>
@@ -925,7 +937,7 @@ function setMode(m) {
   if (m === 1 && selectedStreet !== null) { selectedStreet = null; }
   if (m === 2) { clearStreetMarkers(); clearSfMarkers(); clearEvMarkers(); }
   else if (rankedStreets.length) dropStreetMarkers();
-  if (revMarker && m === 1) { revMarker.remove(); revMarker = null; clearEvMarkers(); document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
+  if (revMarker && m === 1) { revMarker.remove(); revMarker = null; clearEvMarkers(); revFocus = null; revPoint = null; document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
   render();
 }
 function positionThumb() {
@@ -1610,7 +1622,26 @@ const REASONS = {
   D: 'strong local demand pool', T: 'heavy foot traffic', C: 'few direct rivals',
   S: 'high dining spend nearby', uni: 'students next door',
 };
+let revPoint = null, revFocus = null;
+function setRevFocus(f, rowEl) {
+  if (!revPoint || !f.key) return;
+  if (revFocus && revFocus.key === f.key) {   // toggle off
+    revFocus = null;
+    document.querySelectorAll('.fit-row').forEach(r => r.classList.remove('active'));
+    render(); return;
+  }
+  revFocus = {
+    key: f.key, name: f.name,
+    places: COMPETITORS.filter(p => p.cuisine_key === f.key && km([revPoint.lat, revPoint.lng], [p.lat, p.lng]) < 1.0),
+  };
+  clearEvMarkers();   // generic chips give way to the cuisine's actual places
+  document.querySelectorAll('.fit-row').forEach(r => r.classList.remove('active'));
+  if (rowEl) rowEl.classList.add('active');
+  render();
+}
+
 function reverseAt(lat, lng) {
+  revPoint = { lat, lng }; revFocus = null;
   if (revMarker) revMarker.remove();
   const el = document.createElement('div');
   el.innerHTML = '<svg class="center-pin-el" viewBox="0 0 24 32" fill="none"><path d="M12 1C6 1 1.5 5.6 1.5 11.6 1.5 19 12 30.5 12 30.5S22.5 19 22.5 11.6C22.5 5.6 18 1 12 1Z" fill="#C4622D"/><circle cx="12" cy="11.5" r="4" fill="#FFFDF7"/></svg>';
@@ -1652,7 +1683,7 @@ function reverseAt(lat, lng) {
           `${n} thriving within 1 km — demand proven`,
           (sat[key] || 0) === 0 ? 'none this close yet' : `${sat[key]} already within 400 m`,
         ];
-        return { name: CUISINE_LABELS[key] || key.replace(/_/g, ' '), em: CUISINE_EMOJI[key] || '🍽',
+        return { key, name: CUISINE_LABELS[key] || key.replace(/_/g, ' '), em: CUISINE_EMOJI[key] || '🍽',
                  fit, rs, kinds: sat[key] ? ['comp', 'icomp'] : ['resident', 'yelp'] };
       })
       .sort((a, b) => b.fit - a.fit).slice(0, 7);
@@ -1691,6 +1722,7 @@ function reverseAt(lat, lng) {
       <div class="fit-track"><div class="fit-fill" id="fitFill${i}"></div></div>`;
     row.onmouseenter = () => spotlightEvidence(f.kinds);
     row.onmouseleave = () => spotlightEvidence(null);
+    row.onclick = () => setRevFocus(f, row);   // reasoning lands on the map: this cuisine's actual places
     list.appendChild(row);
     setTimeout(() => {
       row.classList.add('in');
@@ -1698,7 +1730,42 @@ function reverseAt(lat, lng) {
       document.getElementById('fitFill' + i).style.width = (f.fit * 100) + '%';
     }, 120 + i * 110);
   });
+
+  // real block stats — the context behind every fit score
+  const stats = [];
+  if (s.full) {
+    if (s.full.st != null) stats.push(`👨‍🎓 ${Math.round(s.full.st)}% students`);
+    if (s.full.sp != null) stats.push(`💳 $${s.full.sp.toLocaleString()}/yr dining spend`);
+    stats.push(`🚶 traffic ${Math.round(c.T * 100)}/100`);
+    if (s.full.ro != null) stats.push(`🍽 ${s.full.ro} restaurants open`);
+  }
+  document.getElementById('revStats').innerHTML = stats.map(x => `<span>${x}</span>`).join('');
+
+  // Gemini narrates the spot from computed numbers only
+  const noteWrap = document.getElementById('revNote');
+  noteWrap.innerHTML = '';
+  if ((GEMINI_KEY || GEMINI_PROXY) && fits.length) {
+    const payload = {
+      location: document.getElementById('revAddr').textContent,
+      block: stats.join(' · ') || 'n/a',
+      top_fits: fits.slice(0, 3).map(f => ({ cuisine: f.name, fit_pct: Math.round(f.fit * 100), evidence: f.rs.join('; ') })),
+    };
+    const myPoint = revPoint;
+    withTimeout(geminiCall({
+      contents: [{ parts: [{ text:
+        `You narrate restaurant siting analyses. Using ONLY these computed numbers (never invent any), write exactly two crisp sentences of plain prose on what kind of restaurant this exact spot in Pittsburgh calls for and why. No hedging, no JSON, no quotes, no markdown.\n\n${JSON.stringify(payload)}` }] }],
+      generationConfig: { temperature: 0.4 },
+    }), 9000).then(txt => {
+      if (!txt || revPoint !== myPoint) return;
+      noteWrap.innerHTML = '';
+      const note = document.createElement('div');
+      note.className = 'gem-note';
+      note.innerHTML = `<b>✦ GEMINI · NARRATING COMPUTED NUMBERS ONLY</b>${txt}`;
+      noteWrap.appendChild(note);
+    });
+  }
   map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14.6), duration: 900 });
+  render();
 }
 
 /* ============ reason focus mode — one variable repaints the map ============ */
@@ -2050,12 +2117,35 @@ function render() {
     }));
   }
 
+  // reverse mode: a clicked cuisine's ACTUAL places light up + the 400 m saturation ring
+  if (uiMode === 2 && revFocus && revPoint) {
+    layers.push(new deck.ScatterplotLayer({
+      id: 'rev-ring', data: [{}],
+      getPosition: () => [revPoint.lng, revPoint.lat],
+      getRadius: 400, radiusUnits: 'meters', stroked: true, filled: true,
+      getFillColor: [156, 59, 36, 14], getLineColor: [156, 59, 36, 150], lineWidthMinPixels: 1.5,
+      parameters: { depthTest: false },
+    }));
+    layers.push(new deck.ScatterplotLayer({
+      id: 'rev-dots', data: revFocus.places, pickable: true,
+      getPosition: d => [d.lng, d.lat],
+      getRadius: 26, radiusUnits: 'meters',
+      getFillColor: [156, 59, 36, 255],
+      stroked: true, getLineColor: [253, 251, 246, 255], lineWidthMinPixels: 2,
+      parameters: { depthTest: false },
+    }));
+  }
+
   overlay.setProps({
     layers,
     getTooltip: ({ object, layer }) => {
       if (!object) return null;
       if (layer.id === 'board') return { text: `square score ${(object.score * 100).toFixed(0)}` + (object.historical ? ` · historical ${ordinal(object.historical.historical_popularity_pct)} percentile` : '') };
       if (layer.id === 'streets') return { text: `${object.name} · ${grade(object.score)} (${(object.score * 100).toFixed(0)})` };
+      if (layer.id === 'rev-dots') {
+        const stars = object.rating ? ` · ★${(+object.rating).toFixed(1)}` : '';
+        return { text: `${object.name}${stars}` };
+      }
       return null;
     },
   });
