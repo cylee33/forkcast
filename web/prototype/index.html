@@ -1771,7 +1771,7 @@ function reverseAt(lat, lng) {
 /* ============ reason focus mode — one variable repaints the map ============ */
 let focusVar = null, focusT0 = 0, focusT = 0, focusRaf = null, focusCache = null;
 const FOCUS_META = {
-  comp:     { name: 'Direct competition',  claim: '300 m catchments around each direct rival — overlaps darken' },
+  comp:     { name: 'Direct competition',  claim: 'red = direct rivals with 300 m catchments · gray = other food nearby' },
   traffic:  { name: 'Foot traffic',        claim: 'pedestrian pulses along the corridor, daypart-weighted' },
   demand:   { name: 'Demand',              claim: 'gravity catchment — blocks colored by local demand' },
   students: { name: 'Student share',       claim: 'each dot ≈ 25 students · tether shows campus pull' },
@@ -1932,10 +1932,12 @@ function focusLayers(st) {
       updateTriggers: { getRadius: [grow < 1 ? tick : 'settled'] },
     }));
     L.push(new deck.ScatterplotLayer({
-      id: 'focus-comp-dots', data: rv.direct, pickable: true,
+      id: 'focus-comp-dots', data: rv.all, pickable: true,
       getPosition: d => [d.lng, d.lat],
-      getRadius: 26, radiusUnits: 'meters',
-      getFillColor: [156, 59, 36, 255],
+      getRadius: d => rv.direct.includes(d) ? 26 : 18,
+      radiusUnits: 'meters',
+      // direct rivals in brick red; every other food place as quiet gray context dots
+      getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 255] : [107, 97, 87, 210],
       stroked: true, getLineColor: [253, 251, 246, 255], lineWidthMinPixels: 2,
       parameters: { depthTest: false },
     }));
