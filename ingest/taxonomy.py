@@ -21,12 +21,13 @@ def cuisine_for(name: str, categories: list[str]) -> str | None:
     best = None
     for key, spec in load()["cuisines"].items():
         for alias in spec["aliases"]:
-            if re.search(rf"\b{re.escape(alias)}\b", text):
-                if best is None or len(alias) > len(best[1]):
-                    best = (key, alias)
+            norm_alias = _norm(alias)
+            if re.search(rf"\b{re.escape(norm_alias)}\b", text):
+                if best is None or len(norm_alias) > len(best[1]):
+                    best = (key, norm_alias)
     return best[0] if best else None
 
 
 def is_chain(name: str) -> bool:
     n = _norm(name)
-    return any(c in n for c in load()["chains"])
+    return any(_norm(c) in n for c in load()["chains"])

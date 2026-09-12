@@ -15,6 +15,21 @@ def test_is_chain():
     assert not taxonomy.is_chain("Blue Sparrow")
 
 
+def test_is_chain_matches_hyphenated_name():
+    assert taxonomy.is_chain("Chick-fil-A")
+
+
+def test_taxonomy_references_resolve_to_defined_cuisines():
+    cuisines = taxonomy.load()["cuisines"]
+    keys = set(cuisines)
+    dangling = [(cuisine, field, ref)
+                for cuisine, spec in cuisines.items()
+                for field in ("complementary", "substitutes")
+                for ref in spec[field]
+                if ref not in keys]
+    assert dangling == []
+
+
 def test_normalize_rows_marks_open_and_geocodes():
     w = load_script("03_wprdc_food")
     rows = [{"id": "1", "facility_name": "Seoul Bulgogi", "status": "1", "description": "Restaurant without Liquor",
