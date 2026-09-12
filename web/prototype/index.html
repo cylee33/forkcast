@@ -389,6 +389,15 @@
   }
 
   .maplibregl-ctrl-attrib { background: rgba(246,241,231,.7) !important; }
+  .maplibregl-popup-content {
+    background: var(--surface) !important; border: 1px solid var(--line) !important;
+    border-radius: 12px !important; box-shadow: var(--shadow) !important;
+    font-family: var(--sans) !important; padding: 11px 14px !important;
+  }
+  .maplibregl-popup-tip { border-top-color: var(--surface) !important; border-bottom-color: var(--surface) !important; }
+  .sup-pop { font-size: 12px; color: var(--sub); line-height: 1.5; }
+  .sup-pop b { display: block; font: 700 13.5px var(--sans); color: var(--ink); margin-bottom: 2px; }
+  .sup-pop i { display: block; font-style: normal; font-size: 10px; color: var(--sub); margin-top: 5px; opacity: .8; }
   .deck-tooltip {
     background: var(--surface) !important; border: 1px solid var(--line) !important;
     border-radius: 10px !important; color: var(--ink) !important; font: 600 11px var(--sans) !important;
@@ -646,7 +655,8 @@ fetchJSON('./streets_real.geojson', '/web/prototype/streets_real.geojson')
   .catch(() => {});
 
 /* real open food places (places.parquet extract) + real cell demographics */
-let COMPETITORS = [], CELLPOINTS = [];
+let COMPETITORS = [], CELLPOINTS = [], SUPPLIERS = [];
+fetchJSON('./suppliers.json', '/web/prototype/suppliers.json').then(j => { SUPPLIERS = j || []; });
 fetchJSON('./competitors.json', '/web/prototype/competitors.json').then(j => { COMPETITORS = j || []; });
 fetchJSON('./cellmeta.json', '/web/prototype/cellmeta.json')
   .then(j => {
@@ -1077,9 +1087,22 @@ async function geminiParseConcept(text) {
   };
   const out = await withTimeout(geminiCall({
     contents: [{ parts: [{ text:
-      `Parse this restaurant concept into structured attributes. weight_hint = suggested importance (0-100, sum 100) of Demand, Competition-gap, foot Traffic, Spending-capacity for scoring locations for this concept.\n\nConcept: "${text}"` }] }],
+`Parse this restaurant concept into structured attributes for a location-scoring engine.
+
+weight_hint = how much each location signal should matter FOR THIS SPECIFIC CONCEPT (integers, sum exactly 100, each 5-60). The four signals:
+- D (Demand): size of the resident + daytime population pool nearby
+- C (Competition gap): how costly direct same-cuisine rivals are
+- T (Foot traffic): walk-by volume / impulse visibility / late-night activity
+- S (Spending): household dining budget & tolerance for the price point
+
+DIFFERENTIATE STRONGLY — do not return a flat split. Examples:
+- "sushi for college students" -> T high (impulse, campus footfall), S low (cheap), e.g. {D:30,C:15,T:40,S:15}
+- "fine-dining omakase" -> S and D high, T low (destination, not walk-by), e.g. {D:30,C:20,T:10,S:40}
+- "first specialty bagel shop in town" -> C high (whitespace play), e.g. {D:30,C:40,T:20,S:10}
+
+Concept: "${text}"` }] }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
-  }), 4000);
+  }), 4500);
   try { return JSON.parse(out); } catch { return null; }
 }
 
@@ -1102,6 +1125,15 @@ function applyGeminiParse(gp) {
       document.getElementById('w' + k).value = norm(k);
       document.getElementById('w' + k + 'v').textContent = norm(k);
     });
+    const chip = document.createElement('span');
+    chip.textContent = `⚖ weights tuned: D${norm('D')} C${norm('C')} T${norm('T')} S${norm('S')}`;
+    chip.style.animationDelay = '.5s';
+    wrap.appendChild(chip);
+    const panel = document.getElementById('weights');
+    panel.style.display = 'block';
+    panel.style.transition = 'background .4s ease';
+    panel.style.background = 'var(--accent-soft)';
+    setTimeout(() => { panel.style.background = 'none'; }, 1600);
   }
 }
 
@@ -1330,7 +1362,10 @@ Object.entries(EV_KINDS).forEach(([k, v]) => {
     .catch(() => {});
 });
 let evMarkers = [];
-function clearEvMarkers() { evMarkers.forEach(m => m.marker.remove()); evMarkers = []; }
+function clearEvMarkers() {
+  evMarkers.forEach(m => m.marker.remove()); evMarkers = [];
+  document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+}
 
 function evidenceFor(st) {
   const c = st.comp, out = [];
@@ -1673,6 +1708,7 @@ function enterFocus(key) {
     rivals: key === 'comp'
       ? (st.liveRivals ? splitRivals(st.liveRivals, concept) : realRivals(st, concept))
       : null,
+    suppliers: key === 'supply' ? nearestSuppliers(st) : null,
     dots: key === 'students' ? studentDots() : null,
     tethers: key === 'students' ? UNIS.map(u => ({ s: [u[1], u[0]], d: st.mid })) : null,
   };
@@ -1683,16 +1719,25 @@ function enterFocus(key) {
   document.getElementById('fcClaim').textContent = `${st.name} · ${FOCUS_META[key].claim}`;
   try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0.28); } catch {}
   const KINDS_BY_VAR = {
-    comp: [], traffic: ['transit', 'parking', 'night'],   // comp uses real rival dots, not generic chips
-    demand: ['resident', 'yelp'], students: ['uni'], spend: [], supply: ['supplier'],
+    comp: [], traffic: ['transit', 'parking', 'night'],   // comp + supply use real named markers
+    demand: ['resident', 'yelp'], students: ['uni'], spend: [], supply: [],
   };
   dropEvidence(evidenceFor(st).filter(e => KINDS_BY_VAR[key].includes(e.kind)));
+  if (key === 'supply') dropSupplierMarkers(st, focusCache.suppliers);
   clearSfMarkers(); clearStreetMarkers();
   const lats = st.path.map(p => p[1]), lngs = st.path.map(p => p[0]);
-  const pad = key === 'supply' ? 0.02 : 0.006;
-  map.fitBounds(
-    [[Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]],
-    { padding: { left: 320, right: 80, top: 100, bottom: 60 }, duration: 800 });
+  if (key === 'supply' && focusCache.suppliers) {
+    for (const s of focusCache.suppliers) { lats.push(s.lat); lngs.push(s.lng); }
+  }
+  const pad = key === 'supply' ? 0.004 : 0.006;
+  const fla = lats.filter(Number.isFinite), flg = lngs.filter(Number.isFinite);
+  if (fla.length && flg.length) {
+    try {
+      map.fitBounds(
+        [[Math.min(...flg) - pad, Math.min(...fla) - pad], [Math.max(...flg) + pad, Math.max(...fla) + pad]],
+        { padding: { left: 320, right: 80, top: 100, bottom: 60 }, duration: 800 });
+    } catch { /* keep current camera */ }
+  }
   setTimeout(() => {
     if (!focusVar) return;
     map.easeTo({ pitch: focusVar === 'spend' ? 50 : (pitched ? 55 : 0), duration: 600 });
@@ -1716,6 +1761,43 @@ function exitFocus() {
   document.getElementById('focusChip').style.display = 'none';
   if (selectedStreet !== null) { openWhy(selectedStreet); return; }
   render();
+}
+
+/* real suppliers (suppliers.parquet): specialty sources first, nearest supermarkets fill to six */
+const SUPPLIER_EMOJI = {
+  wholesale: '📦', butcher: '🥩', seafood: '🦞', asian_grocer: '🍜',
+  italian_grocer: '🍝', greengrocer: '🥬', supermarket: '🛒',
+};
+function nearestSuppliers(st) {
+  if (!SUPPLIERS.length) return [];
+  const withD = SUPPLIERS.map(s => ({ ...s, distKm: km([s.lat, s.lng], [st.mid[1], st.mid[0]]) }))
+    .sort((a, b) => a.distKm - b.distKm);
+  const specialty = withD.filter(s => s.supplier_type !== 'supermarket').slice(0, 4);
+  const markets = withD.filter(s => s.supplier_type === 'supermarket').slice(0, 6 - specialty.length);
+  return [...specialty, ...markets].sort((a, b) => a.distKm - b.distKm);
+}
+function dropSupplierMarkers(st, srcs) {
+  (srcs || []).forEach((s, idx) => {
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.className = 'poi fallback';
+    el.style.setProperty('--tint', '#77713B');
+    el.style.cursor = 'pointer';
+    el.textContent = SUPPLIER_EMOJI[s.supplier_type] || '📦';
+    el.title = s.name;
+    el.style.animationDelay = `${.3 + idx * .12}s`;
+    wrap.appendChild(el);
+    const marker = new maplibregl.Marker({ element: wrap, anchor: 'center' })
+      .setLngLat([s.lng, s.lat]).addTo(map);
+    el.onclick = (e) => {
+      e.stopPropagation();
+      new maplibregl.Popup({ offset: 18, closeButton: false })
+        .setLngLat([s.lng, s.lat])
+        .setHTML(`<div class="sup-pop"><b>${s.name}</b>${s.supplier_type.replace(/_/g, ' ')} · ${s.distKm.toFixed(1)} km from ${st.name}<i>source: OSM + hand-checked list (suppliers.parquet)</i></div>`)
+        .addTo(map);
+    };
+    evMarkers.push({ kind: 'supplier', el, marker });
+  });
 }
 
 function trafficTrips(st) {
@@ -1830,19 +1912,19 @@ function focusLayers(st) {
       updateTriggers: { getElevation: [tick] },
     }));
   }
-  if (focusVar === 'supply') {
-    const srcs = [[-79.9750, 40.4520], [-79.9660, 40.4585]];
+  if (focusVar === 'supply' && focusCache && focusCache.suppliers) {
+    const srcs = focusCache.suppliers;
     L.push(new deck.ArcLayer({
-      id: 'focus-arcs', data: srcs.map(s => ({ s, d: st.mid })),
-      getSourcePosition: d => d.s, getTargetPosition: d => d.d,
+      id: 'focus-arcs', data: srcs,
+      getSourcePosition: d => [d.lng, d.lat], getTargetPosition: () => st.mid,
       getSourceColor: [119, 113, 59, 220], getTargetColor: [184, 91, 35, 220],
       getWidth: 2.5, getHeight: 0.35, opacity: ease(t / 0.8),
     }));
     L.push(new deck.ScatterplotLayer({
       id: 'focus-pulse', data: srcs.map((s, i) => ({ s, i })),
       getPosition: d => {
-        const k = (t * 0.35 + d.i * 0.5) % 1;
-        return [d.s[0] + (st.mid[0] - d.s[0]) * k, d.s[1] + (st.mid[1] - d.s[1]) * k];
+        const k = (t * 0.35 + d.i * (1 / Math.max(1, srcs.length))) % 1;
+        return [d.s.lng + (st.mid[0] - d.s.lng) * k, d.s.lat + (st.mid[1] - d.s.lat) * k];
       },
       getRadius: 34, radiusUnits: 'meters', getFillColor: [184, 91, 35, 230],
       updateTriggers: { getPosition: [tick] },
