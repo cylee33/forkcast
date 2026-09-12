@@ -45,6 +45,14 @@ def main():
     zones = []
     for i, h in enumerate(ranked[:5]):
         s = dict(zip(KEYS, map(float, scores[h])))
+        # total, subscores and best_h3 below are genuinely derived per zone (they match this
+        # zone's cells.features entry exactly). drivers, risks, gap and competitors_indirect are
+        # NOT: they are identical placeholder text copy-pasted across all 5 zones, even though the
+        # zones sit at 5 different real locations with 5 different subscore profiles. Writing 5
+        # distinct plausible-sounding narratives here would be fabricating exactly the kind of
+        # content this task is careful not to fabricate -- the real per-zone narrative is Phase 2's
+        # /api/explain endpoint, not this fixture. Dev 3: expect the same canned driver/risk/gap/
+        # competitor text on every zone until that endpoint exists; it is not a rendering bug.
         zones.append({"zone_id": i + 1, "name": f"Zone {i + 1} (fixture)", "total": float(np.dot(list(DEMO_PROFILE["proposed_weights"].values()), list(s.values()))),
                       "best_h3": h, "subscores": s, "confidence": 0.6,
                       "drivers": ["Student demand 91st pct", "Late-night traffic 84th pct", "No direct Korean competitors"],

@@ -75,3 +75,43 @@ reader assume unit length.
 and the repo pinned `pydantic==2.9.2`, so a fresh `make venv` would have failed
 to resolve. The pin moved to `2.13.5`. All 22 tests and `ruff` still pass, so
 `api/models.py` and the contract mirrors were unaffected.
+
+## Scoring
+
+**`spending_capacity` is close to a restatement of population density.** Measured
+across all 18,275 cells, it correlates with raw `hh_count` at Pearson 0.965. The
+formula is `hh_count * sum(income_share * bracket_value)`, and the CEX bracket
+values span only about 5.2x while household counts span orders of magnitude, so
+the household term dominates. The income mix does influence the result — two
+cells with equal households but different income mix differ by up to 5.2x — but
+it is clearly the secondary term.
+
+This matters because the Demand sub-score is a separate gravity catchment over
+population. Spending-fit and Demand may therefore be near-duplicates, and the
+headline Opportunity Score may carry density at roughly double the intended
+weight. A task-level review confirmed the ingest implementation is faithful to
+its contract, so this is a modeling property rather than a bug. **Phase 2 should
+measure both sub-scores' contributions in the backtest before tuning weights by
+hand**, and the weight validator is the place to resolve it.
+
+**There is currently no high-end price signal anywhere in the data.** Google
+`price_level` reaches only 101 places, all of them levels 1 and 2, because the
+Places quota limited enrichment to about 4% of the county. Until the county-wide
+pull completes, the demo's "make it premium" refine has nothing to compare
+against, and `local_price_3` and `local_price_4` are zero for every cell.
+
+## Fixtures — read this before building against `recommend_sample.json` (Dev 3)
+
+**`zones[i].drivers`, `.risks`, `.gap` and `.competitors_indirect` are
+byte-identical across all 5 zones in `data/fixtures/recommend_sample.json`** —
+same `["Student demand 91st pct", ...]`, same `{"demand":82,"supply":20,"gap":62}`,
+same `"Sushi Fuku"` competitor at `distance_m: 210` on every zone, even though the
+5 zones sit at 5 different real locations with 5 different subscore profiles.
+This is fixture placeholder text, not a rendering bug — if a zone panel shows the
+same competitor/driver copy no matter which zone you click, that is expected
+until Phase 2's `/api/explain` endpoint exists and produces the real per-zone
+narrative. `zone.total`, `zone.subscores` and `zone.best_h3` are the genuinely
+derived fields (they match that zone's entry in `cells.features` exactly) and
+can be trusted for anything that reads scores rather than narrative text. See
+the comment in `ingest/make_fixtures.py` at the `zones.append(...)` call for
+where this is generated.

@@ -20,10 +20,10 @@ else
 endif
 
 sanity:
-	$(PY) ingest/sanity.py
+	PYTHONPATH=. $(PY) ingest/sanity.py
 
 fixtures:
-	$(PY) ingest/make_fixtures.py
+	PYTHONPATH=. $(PY) ingest/make_fixtures.py
 
 test:
 	$(PY) -m pytest -q
