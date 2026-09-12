@@ -329,6 +329,26 @@
   }
   .center-pin-el { width: 30px; filter: drop-shadow(0 6px 14px rgba(28,25,19,.3)); }
 
+  /* evidence pins — monopoly-go cascade */
+  .ev-marker {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 10px; font-size: 15px;
+    background: var(--surface); border: 1.5px solid var(--line);
+    box-shadow: 0 5px 14px rgba(31,27,22,.22);
+    animation: evDrop .55s var(--spring) both;
+    transition: transform .2s var(--spring), opacity .2s ease;
+  }
+  .ev-marker.warn { background: #FBE9E4; border-color: #E0B4A6; }
+  .ev-marker.good { background: #E9F0EA; border-color: #BFD3C4; }
+  .ev-marker.dim { opacity: .28; }
+  .ev-marker.hot { transform: scale(1.35); z-index: 5; box-shadow: 0 8px 20px rgba(31,27,22,.3); }
+  @keyframes evDrop {
+    0% { transform: translateY(-90px) scale(.4); opacity: 0; }
+    60% { transform: translateY(4px) scale(1.08); opacity: 1; }
+    80% { transform: translateY(-2px) scale(.97); }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
   .maplibregl-ctrl-attrib { background: rgba(246,241,231,.7) !important; }
   .deck-tooltip {
     background: var(--surface) !important; border: 1px solid var(--line) !important;
@@ -667,7 +687,7 @@ function setMode(m) {
   document.getElementById('results').style.display = (m === 1 && rankedStreets.length && selectedStreet === null) ? 'flex' : 'none';
   document.getElementById('why').style.display = 'none';
   if (m === 1 && selectedStreet !== null) { selectedStreet = null; }
-  if (m === 2) { clearStreetMarkers(); clearSfMarkers(); }
+  if (m === 2) { clearStreetMarkers(); clearSfMarkers(); clearEvMarkers(); }
   else if (rankedStreets.length) dropStreetMarkers();
   if (revMarker && m === 1) { revMarker.remove(); revMarker = null; document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
   render();
@@ -764,7 +784,7 @@ function analyze() {
   const sc = document.getElementById('scanning'); sc.style.display = 'block';
   document.getElementById('results').style.display = 'none';
   document.getElementById('why').style.display = 'none';
-  clearStreetMarkers(); clearSfMarkers();
+  clearStreetMarkers(); clearSfMarkers(); clearEvMarkers();
   selectedStreet = null; revealWave = -1; rankedStreets = []; render();
 
   setTimeout(() => {
@@ -879,6 +899,70 @@ function storefrontsFor(st) {
 }
 function clearSfMarkers() { sfMarkers.forEach(m => m.remove()); sfMarkers = []; }
 
+/* evidence pins: each pin = one reason on the ground, cascading along the street */
+const EV_KINDS = {
+  comp:     { em: '🍜', cls: 'warn', label: 'direct competitor' },
+  icomp:    { em: '🍔', cls: 'warn', label: 'indirect competitor' },
+  uni:      { em: '🎓', cls: 'good', label: 'university anchor' },
+  office:   { em: '🏢', cls: '',     label: 'daytime workers' },
+  transit:  { em: '🚌', cls: '',     label: 'transit stop' },
+  parking:  { em: '🅿️', cls: '',    label: 'parking' },
+  supplier: { em: '📦', cls: '',     label: 'supplier / warehouse' },
+  resident: { em: '👥', cls: '',     label: 'residential density' },
+  yelp:     { em: '⭐', cls: 'good', label: 'review buzz' },
+  night:    { em: '🍺', cls: '',     label: 'nightlife' },
+};
+let evMarkers = [];
+function clearEvMarkers() { evMarkers.forEach(m => m.marker.remove()); evMarkers = []; }
+
+function evidenceFor(st) {
+  const c = st.comp, out = [];
+  const push = (kind, n) => { for (let i = 0; i < n; i++) out.push({ kind, i }); };
+  push('comp', Math.max(0, Math.round((1 - c.C) * 4)));
+  push('icomp', Math.round(c.T * 2));
+  if (c.uniProx > .35) push('uni', c.uniProx > .7 ? 2 : 1);
+  push('office', Math.round(c.T * 2) + 1);
+  push('transit', 1 + Math.round(c.T));
+  push('parking', 1);
+  push('supplier', 1);
+  push('resident', 1 + Math.round(c.D * 2));
+  push('yelp', 1 + Math.round(c.T));
+  if (c.T > .55) push('night', 2);
+  return out.slice(0, 18).map((e) => {
+    const h1 = hash01(st.name + e.kind + e.i), h2 = hash01(e.kind + st.name + e.i);
+    const pts = st.path;
+    const x = h1 * (pts.length - 1), seg = Math.min(pts.length - 2, Math.floor(x)), t = x - seg;
+    const a = pts[seg], b = pts[seg + 1];
+    let lng = a[0] + (b[0] - a[0]) * t, lat = a[1] + (b[1] - a[1]) * t;
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+    const dist = (0.00045 + h2 * 0.0009) * (h2 < .5 ? -1 : 1);   // ~45–135 m off the centerline
+    lng += (-dy / len) * dist; lat += (dx / len) * dist * 0.75;
+    return { ...e, t: x, lng, lat };
+  }).sort((a, b) => a.t - b.t);  // cascade sweeps down the street
+}
+
+function dropEvidence(st) {
+  clearEvMarkers();
+  evidenceFor(st).forEach((e, idx) => {
+    const k = EV_KINDS[e.kind];
+    const el = document.createElement('div');
+    el.className = 'ev-marker' + (k.cls ? ' ' + k.cls : '');
+    el.textContent = k.em;
+    el.title = k.label;
+    el.style.animationDelay = `${.35 + idx * .07}s`;
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([e.lng, e.lat]).addTo(map);
+    evMarkers.push({ kind: e.kind, el, marker });
+  });
+}
+function spotlightEvidence(kinds) {
+  evMarkers.forEach(m => {
+    const on = kinds && kinds.includes(m.kind);
+    m.el.classList.toggle('hot', !!on);
+    m.el.classList.toggle('dim', kinds ? !on : false);
+  });
+}
+
 function openWhy(i) {
   selectedStreet = i; hoveredStreet = null;
   const st = rankedStreets[i], c = st.comp;
@@ -896,26 +980,30 @@ function openWhy(i) {
   const spend = Math.round(2300 + c.S * 1900 + seed * 200);
   const M = [
     ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100,
-      competitors <= 1 ? 'whitespace for this concept' : 'crowded field'],
-    ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted'],
-    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment'],
-    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity'],
-    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity'],
+      competitors <= 1 ? 'whitespace for this concept' : 'crowded field', ['comp', 'icomp']],
+    ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted', ['transit', 'office', 'night', 'parking']],
+    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', ['resident', 'yelp']],
+    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity', ['uni']],
+    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity', ['resident']],
+    ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', ['supplier']],
   ];
   const wrap = document.getElementById('whyMetrics');
   wrap.innerHTML = '';
-  M.forEach(([label, val, pct, sub], j) => {
+  M.forEach(([label, val, pct, sub, kinds], j) => {
     const m = document.createElement('div');
     m.className = 'metric';
     m.innerHTML = `
       <div class="row"><span class="lb">${label} <span>· ${sub}</span></span><span class="v">${val}</span></div>
       <div class="track"><div class="fill"></div></div>`;
+    m.onmouseenter = () => spotlightEvidence(kinds);
+    m.onmouseleave = () => spotlightEvidence(null);
     wrap.appendChild(m);
     setTimeout(() => {
       m.classList.add('in');
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
   });
+  dropEvidence(st);  // monopoly-go cascade: the reasons land on the map
 
   // storefront candidates
   const sfs = storefrontsFor(st);
@@ -941,7 +1029,7 @@ function openWhy(i) {
   render();
 }
 function closeWhy() {
-  selectedStreet = null; clearSfMarkers();
+  selectedStreet = null; clearSfMarkers(); clearEvMarkers();
   document.getElementById('why').style.display = 'none';
   document.getElementById('results').style.display = 'flex';
   map.flyTo({ center: [center[1], center[0]], zoom: 13.2, duration: 1100 });
@@ -1033,7 +1121,7 @@ function render() {
   // the board (mode 1, after analyze): go-board squares, quiet squares cut out entirely
   if (uiMode === 1 && board.length) {
     const scores = board.map(c => c.score).sort((a, b) => a - b);
-    const cut = scores[Math.floor(scores.length * 0.25)] ?? 0;
+    const cut = scores[Math.floor(scores.length * 0.32)] ?? 0;
     const dimAll = selectedStreet !== null;
     layers.push(new deck.PolygonLayer({
       id: 'board',
@@ -1042,9 +1130,10 @@ function render() {
       pickable: true,
       stroked: false,
       getFillColor: d => {
-        const [r, g, b] = rampColor((d.score - cut) / Math.max(.05, 1 - cut));
-        let a = d.wave <= revealWave ? 190 : 0;
-        if (dimAll) a = 85;
+        const t = (d.score - cut) / Math.max(.05, 1 - cut);
+        const [r, g, b] = rampColor(t);
+        let a = d.wave <= revealWave ? Math.round(120 + t * 85) : 0;  // quiet squares fade back
+        if (dimAll) a = 80;
         return [r, g, b, a];
       },
       updateTriggers: { getFillColor: [revealWave, selectedStreet] },
