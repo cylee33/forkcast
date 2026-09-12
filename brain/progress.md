@@ -21,7 +21,7 @@ spec to `docs/superpowers/specs/2026-09-12-forkcast-design.md` and the
 CLI, because the machine had neither a usable interpreter nor a container
 runtime. See `brain/lessons.md` for the details and the two image fixes.
 
-**Built (Tasks 1–5).**
+**Built (Tasks 1–8).**
 
 | Task | What landed |
 |---|---|
@@ -30,18 +30,43 @@ runtime. See `brain/lessons.md` for the details and the two image fixes.
 | 3 | `brain/team.md`, `brain/demo.md`, four role files under `.claude/agents/` |
 | 4 | `ingest/common.py` (paths, engine, area weighting, H3 helpers, percentiles) and `00_grid.py`; 18,275 cells are in the `geo_cells` table |
 | 5 | `01_census_acs.py` and its tests; the data run is blocked on a Census key |
+| 6 | `02_lodes.py`; 686,253 daytime workers, peaking Downtown |
+| 7 | `03_wprdc_food.py` plus a 49-cuisine taxonomy; 15,215 facilities, 9,970 of them open |
+| 8 | `04_osm_pois.py`; anchors, suppliers, parking, walkability, road frontage and transit for all 18,275 cells, plus GTFS |
 
-Twelve tests pass and `ruff check .` is clean.
+Twenty-two tests pass and `ruff check .` is clean.
 
-**Blocked.** `01_census_acs.py` cannot fetch without a `CENSUS_API_KEY`. The
-code is committed and needs only `make ingest STEP=01` once a key is in
-`.env`. Tasks 12 and 15 consume its output, so the key is on the critical path.
+**The feature store checks out against real geography.** Downtown leads walkability
+and transit, the South Side has the most bars, Oakland has the universities, and the
+outer suburbs are empty. Supplier distances run from a third of a kilometre in the
+Strip District to over twenty in Sewickley.
 
-**Pick up here next:** Task 6 (`02_lodes.py`), then Tasks 7 and 8, which need
-no API keys. Get the Census key and the WPRDC resource id in parallel. The
+**Eight plan defects were found and corrected during execution**, each recorded in the
+execution ledger with the reasoning and the cost of being wrong. The notable ones: the
+plan's assumed WPRDC column names and open/closed signal were both wrong, its GTFS URL
+was dead, Overpass refuses requests that carry no User-Agent header, and one snippet
+would have silently dropped four of the five hand-listed suppliers.
+
+**Blocked on keys.** Every remaining ingest task needs a key that is not yet in
+`.env`, so this is where the work stops.
+
+| Key | Blocks | Why it matters |
+|---|---|---|
+| `CENSUS_API_KEY` | Task 5's data run, then 12 and 15 | Free and instant. The API refuses keyless requests |
+| `GOOGLE_PLACES_API_KEY` | Tasks 9, 11 and 14 | The most valuable one. About $117 for roughly 3,600 requests, inside Google's free monthly credit |
+| `VOYAGE_API_KEY` | Task 11 | Embeddings for competitor similarity |
+| `BESTTIME_API_KEY_PRIVATE` | Task 10's real traffic | The proxy path runs without it |
+
+Google's key is the urgent one. Restaurant names alone identify cuisine for only
+48% of open places, and just three Korean restaurants match, which would leave the
+Korean demo concept with no competitors to score against. Google's place types are
+what fix that.
+
+**Pick up here next:** Task 9 (`05_google_places.py`) as soon as a Google key exists,
+then 11 and 14 behind it. Task 10 can run its proxy path at any time. The
 task-by-task ledger with review findings and rulings lives at
-`.superpowers/sdd/2026-09-12-foundation-data-pipeline/progress.md`; the
-checkbox state lives in `brain/tasks.md`.
+`.superpowers/sdd/2026-09-12-foundation-data-pipeline/progress.md`; the checkbox
+state lives in `brain/tasks.md`.
 
 ## Dev 2
 
