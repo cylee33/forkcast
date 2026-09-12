@@ -64,7 +64,7 @@
   .hero::before { top: 84px; }
   .hero::after { bottom: 84px; }
   .hero .kicker {
-    font-size: 12px; letter-spacing: .28em; color: var(--sub); margin-bottom: 30px; opacity: 0;
+    font-size: 12px; letter-spacing: .28em; color: var(--sub); margin: 56px 0 30px; opacity: 0;
   }
   .play .kicker { animation: rise .6s ease .1s forwards; }
 
@@ -137,7 +137,8 @@
   }
   .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
   .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--surface); }
-  .hero .foot { position: absolute; bottom: 40px; font-size: 12px; color: var(--sub); letter-spacing: .12em; }
+  .hero .foot { position: absolute; bottom: 40px; font-size: 12px; color: var(--sub); letter-spacing: .12em; padding: 0 24px; }
+  @media (max-height: 780px) { .hero .foot { display: none; } }
 
   /* ---------- app ---------- */
   .app { position: relative; height: 100vh; background: var(--bg); }
@@ -689,7 +690,7 @@ function setMode(m) {
   if (m === 1 && selectedStreet !== null) { selectedStreet = null; }
   if (m === 2) { clearStreetMarkers(); clearSfMarkers(); clearEvMarkers(); }
   else if (rankedStreets.length) dropStreetMarkers();
-  if (revMarker && m === 1) { revMarker.remove(); revMarker = null; document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
+  if (revMarker && m === 1) { revMarker.remove(); revMarker = null; clearEvMarkers(); document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
   render();
 }
 function positionThumb() {
@@ -863,13 +864,10 @@ function clearStreetMarkers() { streetMarkers.forEach(m => m.remove()); streetMa
 function dropStreetMarkers() {
   clearStreetMarkers();
   rankedStreets.forEach((st, i) => {
-    const el = document.createElement('div');
-    el.className = 'rank-marker' + (st.rank === 1 ? ' first' : '');
-    el.style.animationDelay = `${i * .12}s`;
-    el.textContent = st.rank;
+    const { marker, el } = animatedMarker(
+      'rank-marker' + (st.rank === 1 ? ' first' : ''), st.rank, i * .12, st.mid);
     el.onclick = (e) => { e.stopPropagation(); openWhy(i); };
-    streetMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat(st.mid).addTo(map));
+    streetMarkers.push(marker);
   });
 }
 
@@ -941,19 +939,49 @@ function evidenceFor(st) {
   }).sort((a, b) => a.t - b.t);  // cascade sweeps down the street
 }
 
-function dropEvidence(st) {
+/* maplibre positions the WRAPPER via inline transform; the drop animation lives on an
+   inner child so the keyframe transform never fights the marker's map placement */
+function animatedMarker(className, content, delaySec, lngLat, anchor = 'center') {
+  const wrap = document.createElement('div');
+  const el = document.createElement('div');
+  el.className = className;
+  el.textContent = content;
+  el.style.animationDelay = `${delaySec}s`;
+  wrap.appendChild(el);
+  const marker = new maplibregl.Marker({ element: wrap, anchor }).setLngLat(lngLat).addTo(map);
+  return { marker, el };
+}
+
+function dropEvidence(list) {
   clearEvMarkers();
-  evidenceFor(st).forEach((e, idx) => {
+  list.forEach((e, idx) => {
     const k = EV_KINDS[e.kind];
-    const el = document.createElement('div');
-    el.className = 'ev-marker' + (k.cls ? ' ' + k.cls : '');
-    el.textContent = k.em;
+    const { marker, el } = animatedMarker(
+      'ev-marker' + (k.cls ? ' ' + k.cls : ''), k.em, .35 + idx * .07, [e.lng, e.lat]);
     el.title = k.label;
-    el.style.animationDelay = `${.35 + idx * .07}s`;
-    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-      .setLngLat([e.lng, e.lat]).addTo(map);
     evMarkers.push({ kind: e.kind, el, marker });
   });
+}
+
+/* radial evidence for a clicked point (reverse mode): cascade sweeps outward */
+function evidenceAt(lat, lng, c, seedKey) {
+  const out = [];
+  const push = (kind, n) => { for (let i = 0; i < n; i++) out.push({ kind, i }); };
+  push('comp', Math.max(0, Math.round((1 - c.C) * 4)));
+  push('icomp', Math.round(c.T * 2));
+  if (c.uniProx > .35) push('uni', c.uniProx > .7 ? 2 : 1);
+  push('office', Math.round(c.T * 2) + 1);
+  push('transit', 1 + Math.round(c.T));
+  push('parking', 1);
+  push('supplier', 1);
+  push('resident', 1 + Math.round(c.D * 2));
+  push('yelp', 1 + Math.round(c.T));
+  if (c.T > .55) push('night', 2);
+  return out.slice(0, 16).map((e) => {
+    const h1 = hash01(seedKey + e.kind + e.i), h2 = hash01(e.kind + seedKey + e.i);
+    const ang = h1 * Math.PI * 2, dist = 0.0005 + h2 * 0.0011;   // ~50–160 m out
+    return { ...e, t: dist, lng: lng + Math.cos(ang) * dist, lat: lat + Math.sin(ang) * dist * 0.75 };
+  }).sort((a, b) => a.t - b.t);
 }
 function spotlightEvidence(kinds) {
   evMarkers.forEach(m => {
@@ -1003,7 +1031,7 @@ function openWhy(i) {
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
   });
-  dropEvidence(st);  // monopoly-go cascade: the reasons land on the map
+  dropEvidence(evidenceFor(st));  // monopoly-go cascade: the reasons land along the street
 
   // storefront candidates
   const sfs = storefrontsFor(st);
@@ -1019,10 +1047,7 @@ function openWhy(i) {
       <div><div class="rent">$${sf.rentMo.toLocaleString()}/mo</div><div class="sq">${sf.sqft.toLocaleString()} sqft · est.</div></div>`;
     sfWrap.appendChild(el);
     setTimeout(() => el.classList.add('in'), 650 + j * 130);
-    const mk = document.createElement('div');
-    mk.className = 'sf-marker'; mk.textContent = sf.tag;
-    mk.style.animationDelay = `${.6 + j * .13}s`;
-    sfMarkers.push(new maplibregl.Marker({ element: mk, anchor: 'center' }).setLngLat(sf.lngLat).addTo(map));
+    sfMarkers.push(animatedMarker('sf-marker', sf.tag, .6 + j * .13, sf.lngLat).marker);
   });
 
   map.flyTo({ center: st.mid, zoom: 15.4, duration: 1300 });
@@ -1077,14 +1102,22 @@ function reverseAt(lat, lng) {
     const d = km([lat, lng], [mid[1], mid[0]]);
     if (d < bd) { bd = d; nearest = st; }
   }
+  const COMP_KINDS = {
+    D: ['resident', 'yelp', 'uni'], C: ['comp', 'icomp'],
+    T: ['transit', 'office', 'night', 'parking'], S: ['resident', 'supplier'],
+  };
   const fits = CONCEPTS.map(cc => {
     const base = c.D * cc.w.D + c.C * cc.w.C + c.T * cc.w.T + c.S * cc.w.S;
     const noise = (hash01(cc.name + lat.toFixed(4) + lng.toFixed(4)) - .5) * .08;
     const fit = Math.min(.98, Math.max(.05, base + c.uniProx * .06 + noise));
     const contrib = Object.entries(cc.w).map(([k, w]) => [k, w * c[k]]).sort((a, b) => b[1] - a[1]);
     const rs = [REASONS[contrib[0][0]], c.uniProx > .5 ? REASONS.uni : REASONS[contrib[1][0]]];
-    return { ...cc, fit, rs: [...new Set(rs)] };
+    const kinds = [...new Set([...COMP_KINDS[contrib[0][0]], ...(c.uniProx > .5 ? ['uni'] : COMP_KINDS[contrib[1][0]])])];
+    return { ...cc, fit, rs: [...new Set(rs)], kinds };
   }).sort((a, b) => b.fit - a.fit).slice(0, 6);
+
+  // the reasoning lands on the map: evidence pins cascade outward from the clicked spot
+  dropEvidence(evidenceAt(lat, lng, c, lat.toFixed(4) + lng.toFixed(4)));
 
   document.getElementById('revHint').style.display = 'none';
   const res = document.getElementById('revResult');
@@ -1103,6 +1136,8 @@ function reverseAt(lat, lng) {
       <div><div class="nm">${f.name}</div><div class="rs">${f.rs.join(' · ')}</div></div>
       <div class="pct" id="fitPct${i}">0%</div>
       <div class="fit-track"><div class="fit-fill" id="fitFill${i}"></div></div>`;
+    row.onmouseenter = () => spotlightEvidence(f.kinds);
+    row.onmouseleave = () => spotlightEvidence(null);
     list.appendChild(row);
     setTimeout(() => {
       row.classList.add('in');
