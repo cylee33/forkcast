@@ -1103,7 +1103,7 @@ DIFFERENTIATE STRONGLY — do not return a flat split. Examples:
 - "first specialty bagel shop in town" -> C high (whitespace play), e.g. {D:30,C:40,T:20,S:10}
 
 Concept: "${text}"` }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
   }), 9000);
   try { return JSON.parse(out); } catch { return null; }
 }
@@ -1144,7 +1144,7 @@ async function geminiNarrateWhy(st, metrics) {
   return withTimeout(geminiCall({
     contents: [{ parts: [{ text:
       `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write exactly two crisp sentences of plain prose on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate, no JSON, no quotes, no markdown.\n\n${JSON.stringify(metrics)}` }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
   }), 9000);
 }
 
