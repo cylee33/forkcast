@@ -16,15 +16,25 @@ OUT = Path(__file__).parent
 
 # ---------------------------------------------------------------- streets
 # name, neighborhood, address-number range, clip bbox (south, west, north, east)
+# name, neighborhood, address range, clip bbox (south, west, north, east), optional OSM name override
 CORRIDORS = [
-    ("S Craig Street",  "Oakland",        (280, 480),   (40.4415, -79.9505, 40.4495, -79.9475)),
-    ("Forbes Avenue",   "Oakland",        (3600, 4000), (40.4400, -79.9640, 40.4445, -79.9490)),
-    ("Walnut Street",   "Shadyside",      (5400, 5880), (40.4500, -79.9390, 40.4525, -79.9290)),
-    ("Butler Street",   "Lawrenceville",  (3500, 4700), (40.4630, -79.9680, 40.4690, -79.9540)),
-    ("E Carson Street", "South Side",     (1000, 2200), (40.4270, -79.9860, 40.4305, -79.9660)),
-    ("Murray Avenue",   "Squirrel Hill",  (1900, 2300), (40.4330, -79.9245, 40.4430, -79.9215)),
-    ("Penn Avenue",     "Strip District", (2000, 2900), (40.4490, -79.9820, 40.4560, -79.9680)),
-    ("Liberty Avenue",  "Bloomfield",     (4400, 4800), (40.4600, -79.9530, 40.4645, -79.9420)),
+    ("S Craig Street",  "Oakland",        (280, 480),   (40.4415, -79.9505, 40.4495, -79.9475), "South Craig Street"),
+    ("N Craig Street",  "North Oakland",  (100, 600),   (40.4487, -79.9525, 40.4565, -79.9475), "North Craig Street"),
+    ("Forbes Avenue",   "Oakland",        (3600, 4000), (40.4400, -79.9640, 40.4445, -79.9490), None),
+    ("Fifth Avenue",    "Oakland",        (3300, 4400), (40.4398, -79.9660, 40.4460, -79.9480), None),
+    ("Atwood Street",   "Oakland",        (3400, 3700), (40.4370, -79.9585, 40.4420, -79.9550), None),
+    ("Oakland Avenue",  "Oakland",        (3400, 3700), (40.4372, -79.9565, 40.4418, -79.9535), None),
+    ("S Bouquet Street","Oakland",        (3400, 3700), (40.4350, -79.9545, 40.4425, -79.9500), "South Bouquet Street"),
+    ("Semple Street",   "South Oakland",  (3200, 3700), (40.4330, -79.9610, 40.4395, -79.9540), None),
+    ("Centre Avenue",   "Shadyside",      (4700, 5800), (40.4515, -79.9510, 40.4565, -79.9320), None),
+    ("Ellsworth Avenue","Shadyside",      (5500, 6300), (40.4500, -79.9460, 40.4550, -79.9320), None),
+    ("Baum Boulevard",  "Bloomfield",     (4700, 5600), (40.4550, -79.9510, 40.4605, -79.9340), None),
+    ("Walnut Street",   "Shadyside",      (5400, 5880), (40.4500, -79.9390, 40.4525, -79.9290), None),
+    ("Butler Street",   "Lawrenceville",  (3500, 4700), (40.4630, -79.9680, 40.4690, -79.9540), None),
+    ("E Carson Street", "South Side",     (1000, 2200), (40.4270, -79.9860, 40.4305, -79.9660), "East Carson Street"),
+    ("Murray Avenue",   "Squirrel Hill",  (1900, 2300), (40.4330, -79.9245, 40.4430, -79.9215), None),
+    ("Penn Avenue",     "Strip District", (2000, 2900), (40.4490, -79.9820, 40.4560, -79.9680), None),
+    ("Liberty Avenue",  "Bloomfield",     (4400, 4800), (40.4600, -79.9530, 40.4645, -79.9420), None),
 ]
 
 MIRRORS = [
@@ -53,10 +63,10 @@ def fetch_streets():
 
     import time
     feats = []
-    for name, hood, rng, (s, w, n, e) in CORRIDORS:
+    for name, hood, rng, (s, w, n, e), osm_name in CORRIDORS:
         time.sleep(2)
         q = f"""[out:json][timeout:30];
-way["highway"]["name"="{name.replace('S Craig Street', 'South Craig Street').replace('E Carson Street', 'East Carson Street')}"]({s},{w},{n},{e});
+way["highway"]["name"="{osm_name or name}"]({s},{w},{n},{e});
 out geom;"""
         ways = overpass(q)
         if not ways:  # some corridors sign the short form

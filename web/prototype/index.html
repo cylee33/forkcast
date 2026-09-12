@@ -1213,7 +1213,7 @@ function rankStreets(concept, radM) {
   })
   .filter(st => st.distKm * 1000 <= radM)   // some point of the street must lie inside the radius
   .sort((a, b) => b.score - a.score)
-  .slice(0, 5);
+  .slice(0, 8);
   rankedStreets.forEach((st, i) => st.rank = i + 1);
   renderStreetList(concept);
   setTimeout(() => { if (uiMode === 1) dropStreetMarkers(); }, 450);
