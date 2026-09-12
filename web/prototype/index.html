@@ -997,22 +997,32 @@ const GTYPE_MAP = {
   bar: 'bar', wine_bar: 'wine_bar', ice_cream_shop: 'dessert_ice_cream', dessert_shop: 'dessert_ice_cream',
   sandwich_shop: 'sandwich_deli', breakfast_restaurant: 'breakfast_brunch', brunch_restaurant: 'breakfast_brunch',
 };
+let PLACES_PROXY = true;   // hosted: /api/places serverless proxy; flips off after a 404/503
 async function liveRivals(st) {
-  if (!PLACES_KEY) return null;
+  if (!PLACES_KEY && !PLACES_PROXY) return null;
   try {
-    const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': PLACES_KEY,
-        'X-Goog-FieldMask': 'places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.businessStatus',
-      },
-      body: JSON.stringify({
-        includedTypes: ['restaurant', 'cafe', 'bakery', 'bar', 'meal_takeaway', 'ice_cream_shop'],
-        maxResultCount: 20,
-        locationRestriction: { circle: { center: { latitude: st.mid[1], longitude: st.mid[0] }, radius: 350 } },
-      }),
-    });
+    let r;
+    if (PLACES_KEY) {   // local dev: direct call with the .env key
+      r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': PLACES_KEY,
+          'X-Goog-FieldMask': 'places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.businessStatus',
+        },
+        body: JSON.stringify({
+          includedTypes: ['restaurant', 'cafe', 'bakery', 'bar', 'meal_takeaway', 'ice_cream_shop'],
+          maxResultCount: 20,
+          locationRestriction: { circle: { center: { latitude: st.mid[1], longitude: st.mid[0] }, radius: 350 } },
+        }),
+      });
+    } else {
+      r = await fetch('/api/places', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: st.mid[1], longitude: st.mid[0], radius: 350 }),
+      });
+      if (r.status === 404 || r.status === 503) { PLACES_PROXY = false; return null; }
+    }
     if (!r.ok) return null;
     const j = await r.json();
     return (j.places || [])
@@ -1026,12 +1036,22 @@ async function liveRivals(st) {
 }
 const withTimeout = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]);
 
+let GEMINI_PROXY = true;   // hosted: /api/gemini serverless proxy; flips off after a 404/503
 async function geminiCall(body) {
   for (const model of ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']) {
     try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      let r;
+      if (GEMINI_KEY) {   // local dev: key read from /.env, call direct
+        r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else if (GEMINI_PROXY) {
+        r = await fetch('/api/gemini', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, body }),
+        });
+        if (r.status === 404 || r.status === 503) { GEMINI_PROXY = false; return null; }
+      } else return null;
       if (!r.ok) continue;
       const j = await r.json();
       return j.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
@@ -1041,7 +1061,7 @@ async function geminiCall(body) {
 }
 
 async function geminiParseConcept(text) {
-  if (!GEMINI_KEY || text.length < 18) return null;   // short keywords need no parsing
+  if ((!GEMINI_KEY && !GEMINI_PROXY) || text.length < 18) return null;   // short keywords need no parsing
   const schema = {
     type: 'OBJECT',
     properties: {
@@ -1086,7 +1106,7 @@ function applyGeminiParse(gp) {
 }
 
 async function geminiNarrateWhy(st, metrics) {
-  if (!GEMINI_KEY) return null;
+  if (!GEMINI_KEY && !GEMINI_PROXY) return null;
   return withTimeout(geminiCall({
     contents: [{ parts: [{ text:
       `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write two crisp sentences on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate.\n\n${JSON.stringify(metrics)}` }] }],
