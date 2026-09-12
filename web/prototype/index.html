@@ -1515,9 +1515,22 @@ function openWhy(i) {
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
   });
+  // Gemini narrates the computed numbers (never invents, never ranks) —
+  // called AFTER live verification so the narration matches what's on screen
+  const narrate = (metricsObj) => geminiNarrateWhy(st, metricsObj).then(txt => {
+    if (!txt || selectedStreet !== i) return;
+    wrap.querySelectorAll('.gem-note').forEach(n => n.remove());   // re-entry guard: one note only
+    const note = document.createElement('div');
+    note.className = 'gem-note';
+    note.innerHTML = `<b>✦ GEMINI · NARRATING COMPUTED NUMBERS ONLY</b>${txt}`;
+    wrap.prepend(note);
+  });
+  const baseMetrics = Object.fromEntries(M.map(([l, v]) => [l, v]));
+
   // LIVE Google Places verification of the competitor count on this street
   liveRivals(st).then(list => {
-    if (!list || selectedStreet !== i) return;
+    if (selectedStreet !== i) return;
+    if (!list) { narrate(baseMetrics); return; }
     st.liveRivals = list;
     const direct = splitRivals(list, concept).direct;
     const row = [...wrap.querySelectorAll('.metric')].find(m => m.textContent.includes('Direct competitors'));
@@ -1526,16 +1539,8 @@ function openWhy(i) {
       const lb = row.querySelector('.lb span');
       if (lb) lb.textContent = `· verified LIVE · ${list.length} places checked (Google)`;
     }
-  });
-
-  // Gemini narrates the computed numbers (never invents, never ranks)
-  geminiNarrateWhy(st, Object.fromEntries(M.map(([l, v]) => [l, v]))).then(txt => {
-    if (!txt || selectedStreet !== i) return;
-    wrap.querySelectorAll('.gem-note').forEach(n => n.remove());   // re-entry guard: one note only
-    const note = document.createElement('div');
-    note.className = 'gem-note';
-    note.innerHTML = `<b>✦ GEMINI · NARRATING COMPUTED NUMBERS ONLY</b>${txt}`;
-    wrap.prepend(note);
+    narrate({ ...baseMetrics,
+      'Direct competitors on street': direct.length === 0 ? 'none (verified live via Google)' : `${direct.length} (verified live via Google)` });
   });
 
   // storefront candidates
