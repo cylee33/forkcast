@@ -10,7 +10,8 @@ Checkbox state is the source of truth for what is built. Task numbers match
 - [x] Broadcast matched ACS 2021 tract inputs to all 18,275 Pittsburgh H3 centers
 - [x] Keep Yelp-trained model, derived lookup, and evaluation metadata local/ignored
 - [x] Verify metro-fixed percentiles, coverage flags, portable model predictions, tests, and lint
-- [ ] Connect the optional signal to the future backend response only after an explicit contract decision
+- [x] Add a contract-compatible helper that enriches GeoJSON cell properties when local artifacts exist
+- [ ] Call the helper from `/api/analysis` after the backend endpoint lands
 - [ ] Resolve Yelp review/approval requirements before any public model/results release
 
 ## Phase 0: Planning — complete

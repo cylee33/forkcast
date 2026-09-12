@@ -26,6 +26,17 @@ tests. Cold full-county scoring measured about 1.34 seconds; a warm 500-cell req
 with its candidate H3 IDs and expose the result only as a separately labeled historical
 popularity signal. Do not push model/results publicly without resolving Yelp review terms.
 
+### 2026-09-12 — response enrichment hook
+
+Re-fetched `origin/main`; it remains at `f72f19c`, so the integration branch already
+has the latest foundation. Added `enrich_cell_collection`, which copies a
+`RecommendResponse.cells` FeatureCollection and adds four explicitly historical
+popularity properties per H3 without changing any existing property, subscore, or total.
+It degrades to an unchanged copy when private artifacts are absent. The real 217-cell
+fixture was enriched end to end; the full suite now reports 72 passed and 2 DB skips,
+and ruff is clean. The backend still has no `/api/analysis` implementation, so its final
+connection is one documented call when that endpoint lands.
+
 ## Dev 1 (cylee)
 
 ### 2026-09-12 — Session 1

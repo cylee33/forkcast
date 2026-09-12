@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -19,6 +20,18 @@ ARTIFACTS = Path(os.environ.get("FORKCAST_POPULARITY_ARTIFACTS", Path(__file__).
 MODEL_PATH = ARTIFACTS / "yelp_popularity_hgb.joblib"
 CELLS_PATH = ARTIFACTS / "pittsburgh_h3_demographics.parquet"
 METADATA_PATH = ARTIFACTS / "yelp_popularity_metadata.json"
+
+CELL_PROPERTY_COLUMNS = {
+    "predicted_log_popularity": "historical_popularity_log",
+    "popularity_pct": "historical_popularity_pct",
+    "demographic_missing_count": "historical_popularity_demographic_missing_count",
+    "outside_training_range_count": "historical_popularity_outside_training_range_count",
+}
+
+
+def popularity_available() -> bool:
+    """Return whether every local runtime artifact needed for inference exists."""
+    return all(path.is_file() for path in (MODEL_PATH, CELLS_PATH, METADATA_PATH))
 
 
 @lru_cache(maxsize=2)
@@ -119,3 +132,52 @@ def score_profile(profile: Mapping | object, h3_ids: Iterable[str] | None = None
     else:
         cuisines, price_tier = profile.cuisines, profile.price_tier
     return score_popularity(cuisines, int(price_tier), h3_ids)
+
+
+def enrich_cell_collection(
+    cells: Mapping,
+    profile: Mapping | object,
+    *,
+    required: bool = False,
+) -> dict:
+    """Return a GeoJSON cell collection enriched with the optional popularity signal.
+
+    The frozen response contract permits extra cell properties, so the signal can be
+    attached without entering the seven-subscore Opportunity Score. If local artifacts
+    are absent, the default behavior is to return an unchanged copy; deployments that
+    require the signal can opt into a ``FileNotFoundError`` with ``required=True``.
+    """
+    enriched = deepcopy(dict(cells))
+    if not popularity_available():
+        if required:
+            missing = [
+                str(path) for path in (MODEL_PATH, CELLS_PATH, METADATA_PATH) if not path.is_file()
+            ]
+            raise FileNotFoundError(f"Popularity runtime artifacts are unavailable: {missing}")
+        return enriched
+
+    if enriched.get("type") != "FeatureCollection" or not isinstance(
+        enriched.get("features"), list
+    ):
+        raise ValueError("cells must be a GeoJSON FeatureCollection")
+
+    h3_ids = []
+    for feature in enriched["features"]:
+        try:
+            h3_id = feature["properties"]["h3"]
+        except (KeyError, TypeError) as error:
+            raise ValueError("Every cell feature must contain properties.h3") from error
+        h3_ids.append(str(h3_id))
+    if not h3_ids:
+        return enriched
+    if len(h3_ids) != len(set(h3_ids)):
+        raise ValueError("Cell FeatureCollection contains duplicate H3 ids")
+
+    scored = score_profile(profile, h3_ids).set_index("h3")
+    for feature, h3_id in zip(enriched["features"], h3_ids, strict=True):
+        row = scored.loc[h3_id]
+        properties = feature["properties"]
+        for source, destination in CELL_PROPERTY_COLUMNS.items():
+            value = row[source]
+            properties[destination] = int(value) if source.endswith("_count") else float(value)
+    return enriched

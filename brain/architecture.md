@@ -25,6 +25,8 @@ Center + radius ──► Candidate H3 cells (precomputed feature store)
 
 An optional `ml.popularity.score_profile(profile, h3_ids)` adapter can provide a
 separately labeled historical online-popularity percentile for candidate H3 cells.
+`ml.popularity.enrich_cell_collection(cells, profile)` attaches that signal to GeoJSON
+cell properties and leaves the collection unchanged when private artifacts are absent.
 It is deliberately outside the seven-subscore weighted Opportunity Score: the model
 was trained on accumulated Yelp review counts and has no Pittsburgh outcome labels.
 Runtime model and demographic assets are mounted locally and are not part of the public

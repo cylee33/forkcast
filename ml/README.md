@@ -12,6 +12,22 @@ The result contains `h3`, `predicted_log_popularity`, metro-fixed `popularity_pc
 
 `predicted_log_popularity` estimates an association with `log1p(review_count)` in the downloaded Yelp snapshot. `popularity_pct` is a Pittsburgh-wide relative rank. Neither field is revenue, survival, causal location lift, a success probability, or a validated Pittsburgh outcome. Keep it outside `D`, `C`, `T`, `A`, `S_spend`, `K`, `Sup`, and `total` unless a later contract change and validation explicitly decide otherwise.
 
+The analysis endpoint can add the signal to its GeoJSON cells without changing the
+seven subscores or their total:
+
+```python
+from ml.popularity import enrich_cell_collection
+
+response.cells = enrich_cell_collection(response.cells, response.profile)
+```
+
+When the local artifacts exist, this adds `historical_popularity_log`,
+`historical_popularity_pct`, `historical_popularity_demographic_missing_count`, and
+`historical_popularity_outside_training_range_count` to every cell's `properties`.
+When they are absent, it returns an unchanged copy by default. Pass `required=True`
+if a private deployment should fail instead. The current response schema allows extra
+cell properties, so this does not alter the frozen required fields.
+
 ## Local artifacts
 
 The repository intentionally ignores `ml/artifacts/`. The Yelp Dataset Terms restrict sharing Data and related metrics with third parties and require Yelp review before a public presentation or publication involving the Data or Yelp brand. Do not commit, push, publish, or place the trained model, evaluation metrics, or derived demographic lookup in a submission package without resolving those terms.
