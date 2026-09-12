@@ -650,6 +650,36 @@ fetch('/web/prototype/cellmeta.json')
   })
   .catch(() => {});
 
+/* county-wide REAL feature store: 18,275 H3 cells exported from cell_features.parquet */
+let FULLINDEX = null;
+const bucketKey = (lat, lng) => `${Math.round(lat / 0.004)}_${Math.round(lng / 0.004)}`;
+fetch('/web/prototype/fullcells.json')
+  .then(r => (r.ok ? r.json() : null))
+  .then(j => {
+    if (!j) return;
+    FULLINDEX = new Map();
+    for (const [id, rec] of Object.entries(j)) {
+      const [lat, lng] = h3.cellToLatLng(id);
+      const item = { id, lat, lng, ...rec };
+      const k = bucketKey(lat, lng);
+      if (!FULLINDEX.has(k)) FULLINDEX.set(k, []);
+      FULLINDEX.get(k).push(item);
+    }
+  })
+  .catch(() => {});
+function nearestFull(lat, lng, maxKm = 0.35) {
+  if (!FULLINDEX) return null;
+  const bl = Math.round(lat / 0.004), bg = Math.round(lng / 0.004);
+  let best = null, bd = maxKm;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (const c of (FULLINDEX.get(`${bl + dy}_${bg + dx}`) || [])) {
+      const d = km([lat, lng], [c.lat, c.lng]);
+      if (d < bd) { bd = d; best = c; }
+    }
+  }
+  return best;
+}
+
 function conceptCuisines(concept) {
   try { return popularityProfile(concept).cuisines.filter(c => c !== 'unknown'); } catch { return []; }
 }
@@ -669,8 +699,13 @@ function realRivals(st, concept) {
   return { direct, indirect, all: [...direct, ...indirect] };
 }
 function streetMeta(st) {
-  if (!CELLPOINTS.length) return null;
-  const near = CELLPOINTS.filter(c => distToPathKm(c.lat, c.lng, st.path) < 0.3);
+  let near = CELLPOINTS.filter(c => distToPathKm(c.lat, c.lng, st.path) < 0.3);
+  if (!near.length && FULLINDEX) {
+    near = st.path
+      .map(([lng, lat]) => nearestFull(lat, lng))
+      .filter(Boolean)
+      .map(c => ({ students: c.st, spend: c.sp, restaurants: c.ro }));
+  }
   if (!near.length) return null;
   const avg = k => { const v = near.map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   return { students: avg('students'), spend: avg('spend'), restaurants: avg('restaurants'), n: near.length };
@@ -824,14 +859,20 @@ function sampleAt(lat, lng, concept) {
       const p = best.p;
       const uniProx = Math.max(...UNIS.map(u => gauss(km([lat,lng],u), 0.8)));
       return {
-        real: true,
+        real: true, src: 'fixture',
         comp: { D: p.D/100, C: p.C/100, T: p.T/100, S: p.S_spend/100, lat, lng, uniProx },
-        score: p.total/100, h3: id, historical,
+        score: p.total/100, h3: id, historical, full: nearestFull(lat, lng),
       };
     }
   }
+  const fc = nearestFull(lat, lng);
+  if (fc && (fc.D || fc.T)) {   // county-wide real composites (metro percentile features)
+    const uniProx = Math.max(...UNIS.map(u => gauss(km([lat, lng], u), 0.8)));
+    const comp = { D: fc.D / 100, C: fc.C / 100, T: fc.T / 100, S: fc.S / 100, lat, lng, uniProx };
+    return { real: true, src: 'county', comp, score: totalScore(comp, getWeights()), h3: fc.id, historical, full: fc };
+  }
   const comp = cellComponents(id, concept);
-  return { real: false, comp, score: totalScore(comp, getWeights()), h3: id, historical };
+  return { real: false, src: 'syn', comp, score: totalScore(comp, getWeights()), h3: id, historical };
 }
 
 /* ============ mode toggle ============ */
@@ -1008,7 +1049,7 @@ async function analyze() {
     for (const b of inRadiusBlocks) {
       const s = sampleAt(b.lat, b.lng, concept);
       board.push({
-        lat: b.lat, lng: b.lng, comp: s.comp, real: s.real,
+        lat: b.lat, lng: b.lng, comp: s.comp, real: s.real, src: s.src,
         h3: s.h3 || h3.latLngToCell(b.lat, b.lng, 9), historical: null,
         wave: Math.round(km([b.lat, b.lng], center) * 1000 / BOARD_STEP_M),
         poly: b.ring,
@@ -1024,7 +1065,7 @@ async function analyze() {
         if (km([lat, lng], center) * 1000 > radM) continue;
         const s = sampleAt(lat, lng, concept);
         board.push({
-          lat, lng, comp: s.comp, real: s.real,
+          lat, lng, comp: s.comp, real: s.real, src: s.src,
           h3: s.h3 || h3.latLngToCell(lat, lng, 9), historical: null,
           wave: Math.max(Math.abs(ix), Math.abs(iy)),
           poly: [
@@ -1037,7 +1078,8 @@ async function analyze() {
   }
   const w = getWeights();
   board.forEach(b => b.score = totalScore(b.comp, w));
-  mode = board.some(b => b.real) ? 'fixture' : 'synthetic';
+  mode = board.some(b => b.src === 'fixture') ? 'fixture'
+       : board.some(b => b.src === 'county') ? 'county' : 'synthetic';
 
   document.getElementById('cellCount').textContent = board.length;
   const sc = document.getElementById('scanning'); sc.style.display = 'block';
@@ -1055,7 +1097,9 @@ async function analyze() {
 
   const baseLabel = mode === 'fixture'
     ? `<b>REAL DATA</b> · Oakland feature-store fixture · ${board.length} squares`
-    : `<b>PROTOTYPE</b> · synthetic opportunity scores · ${board.length} squares`;
+    : mode === 'county'
+      ? `<b>REAL DATA</b> · county feature store (18,275 cells) · ${board.length} squares`
+      : `<b>PROTOTYPE</b> · synthetic opportunity scores · ${board.length} squares`;
   const modelLabel = popularityState === 'ready'
     ? ` · <b>ML ON</b> historical popularity${popularityFallback.length ? ' · unknown cuisine fallback' : ''} · Pittsburgh inference only`
     : ' · historical popularity unavailable';
@@ -1399,6 +1443,17 @@ const CONCEPTS = [
   { name: 'Wine bar',                em: '🍷', w: { S: .45, T: .25, C: .2,  D: .1  } },
   { name: 'Bubble tea',              em: '🧋', w: { D: .5,  T: .25, C: .15, S: .1  } },
 ];
+const CUISINE_EMOJI = {
+  korean: '🍲', fried_chicken: '🍗', pizza: '🍕', italian: '🍝', japanese: '🍣',
+  chinese: '🥡', thai: '🍛', indian: '🍛', mexican: '🌮', american: '🍔',
+  cafe: '☕', bakery: '🥐', dessert_ice_cream: '🍦', bubble_tea: '🧋',
+  breakfast_brunch: '🥞', bar: '🍺', wine_bar: '🍷', seafood: '🦞',
+  steakhouse: '🥩', vegan: '🥗', bbq: '🍖', mediterranean: '🥙', vietnamese: '🍜',
+};
+const CUISINE_LABELS = {
+  dessert_ice_cream: 'Dessert / ice cream', breakfast_brunch: 'Breakfast / brunch',
+  fried_chicken: 'Fried chicken', bubble_tea: 'Bubble tea', wine_bar: 'Wine bar',
+};
 const REASONS = {
   D: 'strong local demand pool', T: 'heavy foot traffic', C: 'few direct rivals',
   S: 'high dining spend nearby', uni: 'students next door',
@@ -1422,15 +1477,44 @@ function reverseAt(lat, lng) {
     D: ['resident', 'yelp', 'uni'], C: ['comp', 'icomp'],
     T: ['transit', 'office', 'night', 'parking'], S: ['resident', 'supplier'],
   };
-  const fits = CONCEPTS.map(cc => {
-    const base = c.D * cc.w.D + c.C * cc.w.C + c.T * cc.w.T + c.S * cc.w.S;
-    const noise = (hash01(cc.name + lat.toFixed(4) + lng.toFixed(4)) - .5) * .08;
-    const fit = Math.min(.98, Math.max(.05, base + c.uniProx * .06 + noise));
-    const contrib = Object.entries(cc.w).map(([k, w]) => [k, w * c[k]]).sort((a, b) => b[1] - a[1]);
-    const rs = [REASONS[contrib[0][0]], c.uniProx > .5 ? REASONS.uni : REASONS[contrib[1][0]]];
-    const kinds = [...new Set([...COMP_KINDS[contrib[0][0]], ...(c.uniProx > .5 ? ['uni'] : COMP_KINDS[contrib[1][0]])])];
-    return { ...cc, fit, rs: [...new Set(rs)], kinds };
-  }).sort((a, b) => b.fit - a.fit).slice(0, 6);
+  let fits;
+  if (COMPETITORS.length) {
+    // REAL path — revealed preference: cuisines that demonstrably thrive within 1 km
+    // are demand evidence; saturation within 400 m is the counterweight.
+    // No evidence -> not recommended (absence of supply is NOT opportunity).
+    const ring = COMPETITORS.filter(p => p.cuisine_key && km([lat, lng], [p.lat, p.lng]) < 1.0);
+    const near = COMPETITORS.filter(p => p.cuisine_key && km([lat, lng], [p.lat, p.lng]) < 0.4);
+    const counts = {}, sat = {}, stars = {};
+    for (const p of ring) {
+      counts[p.cuisine_key] = (counts[p.cuisine_key] || 0) + 1;
+      if (p.rating) stars[p.cuisine_key] = Math.max(stars[p.cuisine_key] || 0, p.rating);
+    }
+    for (const p of near) sat[p.cuisine_key] = (sat[p.cuisine_key] || 0) + 1;
+    fits = Object.entries(counts)
+      .filter(([key]) => key !== 'unknown')
+      .map(([key, n]) => {
+        const evidence = Math.min(1, Math.log2(1 + n) / 4);       // 1→.25, 3→.5, 15→1
+        const satPen = Math.min(1, (sat[key] || 0) / 3);          // saturated inside 400 m
+        const fit = Math.min(.98, .18 + evidence * .5 + (1 - satPen) * .17 + c.T * .15);
+        const rs = [
+          `${n} thriving within 1 km — demand proven`,
+          (sat[key] || 0) === 0 ? 'none this close yet' : `${sat[key]} already within 400 m`,
+        ];
+        return { name: CUISINE_LABELS[key] || key.replace(/_/g, ' '), em: CUISINE_EMOJI[key] || '🍽',
+                 fit, rs, kinds: sat[key] ? ['comp', 'icomp'] : ['resident', 'yelp'] };
+      })
+      .sort((a, b) => b.fit - a.fit).slice(0, 7);
+  } else {
+    fits = CONCEPTS.map(cc => {
+      const base = c.D * cc.w.D + c.C * cc.w.C + c.T * cc.w.T + c.S * cc.w.S;
+      const noise = (hash01(cc.name + lat.toFixed(4) + lng.toFixed(4)) - .5) * .08;
+      const fit = Math.min(.98, Math.max(.05, base + c.uniProx * .06 + noise));
+      const contrib = Object.entries(cc.w).map(([k, w]) => [k, w * c[k]]).sort((a, b) => b[1] - a[1]);
+      const rs = [REASONS[contrib[0][0]], c.uniProx > .5 ? REASONS.uni : REASONS[contrib[1][0]]];
+      const kinds = [...new Set([...COMP_KINDS[contrib[0][0]], ...(c.uniProx > .5 ? ['uni'] : COMP_KINDS[contrib[1][0]])])];
+      return { ...cc, fit, rs: [...new Set(rs)], kinds };
+    }).sort((a, b) => b.fit - a.fit).slice(0, 6);
+  }
 
   // the reasoning lands on the map: evidence pins cascade outward from the clicked spot
   dropEvidence(evidenceAt(lat, lng, c, lat.toFixed(4) + lng.toFixed(4)));
@@ -1440,8 +1524,9 @@ function reverseAt(lat, lng) {
   res.style.display = 'block';
   document.getElementById('revAddr').textContent =
     bd < 0.5 ? `Near ${nearest.name}, ${nearest.hood}` : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-  document.getElementById('revSub').textContent =
-    (s.real ? 'real feature store · ' : 'synthetic demo · ') + `block scored on demand, rivals, traffic, spend`;
+  document.getElementById('revSub').textContent = COMPETITORS.length
+    ? 'revealed preference · cuisines proven within 1 km (Google/WPRDC) · saturation-weighted'
+    : (s.real ? 'real feature store · ' : 'synthetic demo · ') + 'block scored on demand, rivals, traffic, spend';
   const list = document.getElementById('fitList');
   list.innerHTML = '';
   fits.forEach((f, i) => {
