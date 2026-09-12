@@ -52,3 +52,26 @@ than a list. The per-task reviews then caught a broken `ruff` invocation and a
 session after writing the code but before committing. The work was recovered
 from the working tree by a second implementer. The lesson is to keep the ledger
 at `.superpowers/sdd/<plan>/progress.md` current, because it is what survives.
+
+## Providers
+
+**The LLM provider moved from Anthropic to Gemini, and the embedding provider
+moved with it.** `gemini-3.8-flash` now does parse, refine, explain and compare;
+`gemini-embedding-001` replaces Voyage `voyage-3` for competitor similarity.
+Because no `api/` LLM code had been written yet, the change was confined to
+documentation, `.env`, `requirements.txt` and the Task 11 brief. Consolidating on
+one provider also removed a key the team no longer has to provision.
+
+**Gemini returns normalized embedding vectors only at its native 3072
+dimensions.** We request `output_dimensionality=1024` so the vector fits the
+existing `places.embedding vector(1024)` column without a migration, which means
+the ingest script must L2-normalize the vectors itself. Google's documentation is
+explicit: "If you are using `gemini-embedding-001`, you must manually normalize
+non-3072 dimensions." Cosine similarity is scale-invariant so rankings would
+survive the omission, but pgvector's inner-product operator and every downstream
+reader assume unit length.
+
+**`google-genai` forced a pydantic upgrade.** It requires `pydantic>=2.12.5`,
+and the repo pinned `pydantic==2.9.2`, so a fresh `make venv` would have failed
+to resolve. The pin moved to `2.13.5`. All 22 tests and `ruff` still pass, so
+`api/models.py` and the contract mirrors were unaffected.

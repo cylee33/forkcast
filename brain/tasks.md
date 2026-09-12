@@ -33,11 +33,11 @@ Checkbox state is the source of truth for what is built. Task numbers match
 
 ### Manual tasks for Dev 1, blocking the tasks named
 
-- [ ] Get a free Census API key and put it in `.env` as `CENSUS_API_KEY` — blocks Task 5's data run, and Tasks 12 and 15 downstream
+- [x] Census API key obtained and set in `.env` as `CENSUS_API_KEY` — unblocks Task 5's data run, and Tasks 12 and 15 downstream
 - [x] WPRDC food-facilities resource id found and set (`112a3821-334d-4f3f-ab40-4de1220b1a0a`)
-- [ ] Provision `GOOGLE_PLACES_API_KEY` — blocks Tasks 9, 11 and 14. Estimated ~3,600 requests, about $117, inside Google's free monthly credit. Cuisine is identifiable for only 48% of open restaurants without it
+- [x] `GOOGLE_PLACES_API_KEY` provisioned and set in `.env` — unblocks Tasks 9, 11 and 14. Estimated ~3,600 requests, about $117, inside Google's free monthly credit. Cuisine is identifiable for only 48% of open restaurants without it
 - [ ] Provision `BESTTIME_API_KEY_PRIVATE` — blocks Task 10's real traffic (the proxy path still runs without it)
-- [ ] Provision `VOYAGE_API_KEY` — blocks Task 11
+- [ ] Provision `GEMINI_API_KEY` — blocks Task 11 (embeddings) and all of Phase 2 (concept parse, refine, explain)
 - [ ] Hand-collect 20–50 asking rents into `data/rents_manual.csv` — blocks Task 13
 - [x] Wholesale suppliers hand-listed in `data/suppliers_manual.csv` (5 of 6; US Foods omitted, address unverifiable)
 

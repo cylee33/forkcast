@@ -125,8 +125,7 @@ types in `web/lib/types.ts` and the schema in `contracts/recommend_response.json
 | `WPRDC_FOOD_RESOURCE_ID` | `03_wprdc_food` | Already known: `112a3821-334d-4f3f-ab40-4de1220b1a0a` |
 | `GOOGLE_PLACES_API_KEY` | `05_google_places` | Roughly 3,600 requests for the county, about $117 |
 | `BESTTIME_API_KEY_PRIVATE` | `07_besttime` | Optional. Without it the script writes its proxy |
-| `VOYAGE_API_KEY` | `08_place_embeddings` | Competitor-similarity embeddings |
-| `ANTHROPIC_API_KEY` | the backend | Concept parsing, refinement, explanations |
+| `GEMINI_API_KEY` | `08_place_embeddings` and the backend | Competitor-similarity embeddings, plus concept parsing, refinement and explanations |
 
 ---
 
@@ -186,7 +185,7 @@ make sanity                       # static heatmaps to eyeball the feature store
 | `04_osm_pois` | OpenStreetMap + PRT GTFS | Anchors, suppliers, parking, walkability, road frontage, transit trips |
 | `05_google_places` | Google Places (New) | Ratings, review counts, price level, business status, place types |
 | `07_besttime` | BestTime, or a proxy | Relative busyness by daypart |
-| `08_place_embeddings` | Voyage `voyage-3` | A 1024-dimension vector per place, for competitor similarity |
+| `08_place_embeddings` | Gemini `gemini-embedding-001` | A 1024-dimension vector per place, for competitor similarity |
 | `09_spend_capacity` | BLS CEX × ACS | Spending capacity and the local price-tier profile |
 | `10_rent_proxy` | Zillow ZORI + hand-collected asking rents | An estimated rent per square foot, always labeled an estimate |
 | `11_cuisine_affinity` | derived | Observed affinity per cuisine |

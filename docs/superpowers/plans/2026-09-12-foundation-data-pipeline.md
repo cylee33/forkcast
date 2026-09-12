@@ -6,7 +6,7 @@
 
 **Architecture:** Thirteen idempotent Python ingest scripts read raw sources into `data/raw/`, write parquet to `data/processed/`, and upsert Postgres (PostGIS + pgvector) tables. A shared `ingest/common.py` owns paths, DB access, H3 helpers, and area weighting. `12_build_features.py` joins everything into one `cell_features` table with metro-wide percentiles. Contracts in `contracts/` are mirrored by `api/models.py` (Pydantic) and `web/lib/types.ts`.
 
-**Tech Stack:** Python 3.11, pandas, geopandas, shapely, h3 (v4), SQLAlchemy + psycopg, requests, pyyaml, voyageai; Postgres 16 + PostGIS 3.4 + pgvector via Docker; pytest + ruff; GitHub Actions.
+**Tech Stack:** Python 3.11, pandas, geopandas, shapely, h3 (v4), SQLAlchemy + psycopg, requests, pyyaml, google-genai; Postgres 16 + PostGIS 3.4 + pgvector via Docker; pytest + ruff; GitHub Actions.
 
 **Spec:** `docs/superpowers/specs/2026-09-12-forkcast-design.md` (and `forkcast-proposal.md` for formulas).
 
@@ -18,10 +18,10 @@
 - No ACS ancestry or foreign-born tables. No scraping of Google Maps, Yelp, LoopNet, Crexi.
 - Google Places calls are county-wide, field-masked, cached to raw JSON. Never per-hex calls at request time.
 - Every `cell_features` row carries `source`, `resolution`, `updated_at`.
-- Embedding model: Voyage `voyage-3` (1024 dims). LLM: `claude-sonnet-5` (not used in this plan).
+- Embedding model: Gemini `gemini-embedding-001` at `output_dimensionality=1024`, `task_type=SEMANTIC_SIMILARITY`; the caller normalizes, because Google returns normalized vectors only at 3072 dims. LLM: `gemini-3.8-flash` (not used in this plan).
 - Commit after every completed task. Push to `origin main` at least at the end of every task group.
 - Do not create or edit `README.md` (project rule; user permission required).
-- `.env` holds `DATABASE_URL`, `CENSUS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `BESTTIME_API_KEY_PRIVATE`, `VOYAGE_API_KEY`, `WPRDC_FOOD_RESOURCE_ID`.
+- `.env` holds `DATABASE_URL`, `CENSUS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `BESTTIME_API_KEY_PRIVATE`, `GEMINI_API_KEY`, `WPRDC_FOOD_RESOURCE_ID`.
 
 ---
 
@@ -99,7 +99,7 @@ SQLAlchemy==2.0.36
 psycopg[binary]==3.2.3
 requests==2.32.3
 pyyaml==6.0.2
-voyageai==0.3.2
+google-genai==2.23.0
 numpy==1.26.4
 scipy==1.14.1
 matplotlib==3.9.2
@@ -226,8 +226,7 @@ DATABASE_URL=postgresql+psycopg://forkcast:forkcast@localhost:5432/forkcast
 CENSUS_API_KEY=
 GOOGLE_PLACES_API_KEY=
 BESTTIME_API_KEY_PRIVATE=
-VOYAGE_API_KEY=
-ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 WPRDC_FOOD_RESOURCE_ID=
 ```
 
@@ -513,7 +512,7 @@ Every numeric column `X` also has `X_pct` (metro-wide percentile, 0–100). Sour
 | is_open | WPRDC status open AND Google businessStatus != CLOSED_PERMANENTLY |
 | source | `wprdc+google`, `wprdc`, `google` |
 | summary | Google editorialSummary text |
-| embedding | vector(1024), voyage-3 on `name. categories. summary` |
+| embedding | vector(1024), gemini-embedding-001 (output_dimensionality 1024) on `name. categories. summary` |
 ```
 
 - [ ] **Step 5: Write the failing contract test**
@@ -767,7 +766,7 @@ git add -A && git commit -m "feat: freeze contracts (ConceptProfile, RecommendRe
 ```markdown
 ---
 name: data-ingest
-description: Owns ingest/ scripts, data/ layout, cell_features construction. Use for any Census, LODES, WPRDC, OSM, GTFS, Google Places, BestTime, Voyage, rent, or affinity work.
+description: Owns ingest/ scripts, data/ layout, cell_features construction. Use for any Census, LODES, WPRDC, OSM, GTFS, Google Places, BestTime, Gemini embeddings, rent, or affinity work.
 ---
 You own `ingest/` and `data/`. Read `contracts/cell_features.md` before touching columns. Every script is idempotent and accepts `--limit N`. Cache raw API responses under `data/raw/<source>/`. Never call Google per hex. Never ingest ACS ancestry or foreign-born tables. Write parquet to `data/processed/` and upsert the DB via `ingest/common.py`. Run `make test` before committing.
 ```
@@ -2169,12 +2168,15 @@ git add -A && git commit -m "feat(ingest): BestTime daypart activity with proxy 
 - Create: `ingest/08_place_embeddings.py`, `tests/test_embeddings.py`
 
 **Interfaces:**
-- Produces: `PROC/place_embeddings.parquet` (`id, embedding: list[float]` 1024) and fills `places.embedding` in DB. Function `embed_text(row) -> str`.
+- Produces: `PROC/place_embeddings.parquet` (`id, embedding: list[float]` 1024) and fills `places.embedding` in DB. Functions `embed_text(row) -> str`, `l2_normalize(v: list[float]) -> list[float]`.
+
+**Pre-check for the implementer:** `gemini-embedding-001` has historically restricted how many texts one `embed_content` call accepts. Send a 2-item batch before the full run. If the API rejects it, set `BATCH = 1` and keep going — the cache makes a slow run resumable.
 
 - [ ] **Step 1: Failing test**
 
 `tests/test_embeddings.py`:
 ```python
+import numpy as np
 import pandas as pd
 
 from tests.conftest import load_script
@@ -2184,24 +2186,36 @@ def test_embed_text_composes_name_categories_summary():
     e = load_script("08_place_embeddings")
     row = pd.Series({"name": "Seoul Bulgogi", "categories": ["korean_restaurant", "restaurant"], "summary": "Casual Korean."})
     assert e.embed_text(row) == "Seoul Bulgogi. korean restaurant, restaurant. Casual Korean."
+
+
+def test_l2_normalize_gives_unit_length():
+    e = load_script("08_place_embeddings")
+    out = e.l2_normalize([3.0, 4.0])
+    assert np.isclose(np.linalg.norm(out), 1.0)
+    assert np.allclose(out, [0.6, 0.8])
 ```
 
 - [ ] **Step 2: Run to verify failure.**
 
 - [ ] **Step 3: Write `ingest/08_place_embeddings.py`**
 
+`gemini-embedding-001` returns normalized vectors only at its native 3072 dimensions. We ask for 1024 to match `places.embedding vector(1024)`, so the script must normalize itself — Google's documentation is explicit about this. Cosine is scale-invariant, so this does not change ranking today, but it keeps the vectors usable with pgvector's inner-product operator and matches what every downstream reader will assume.
+
 ```python
-"""Voyage voyage-3 embeddings for every place → pgvector."""
+"""Gemini gemini-embedding-001 embeddings for every place → pgvector."""
 import json
 
+import numpy as np
 import pandas as pd
-import voyageai
+from google import genai
+from google.genai import types
 from sqlalchemy import text
 
 from ingest import common
 
-MODEL = "voyage-3"
-BATCH = 128
+MODEL = "gemini-embedding-001"
+DIMS = 1024
+BATCH = 100
 
 
 def embed_text(row: pd.Series) -> str:
@@ -2210,12 +2224,17 @@ def embed_text(row: pd.Series) -> str:
     return ". ".join(p for p in parts if p).rstrip(".") + "."
 
 
+def l2_normalize(v: list[float]) -> list[float]:
+    a = np.asarray(v, dtype=float)
+    return (a / np.linalg.norm(a)).tolist()
+
+
 def main():
     args = common.cli(__doc__)
     places = common.load("places")
     if args.limit:
         places = places.head(args.limit)
-    cache = common.RAW / "voyage/embeddings.jsonl"
+    cache = common.RAW / "gemini/embeddings.jsonl"
     cache.parent.mkdir(parents=True, exist_ok=True)
     done = {}
     if cache.exists():
@@ -2223,12 +2242,18 @@ def main():
             r = json.loads(line)
             done[r["id"]] = r["v"]
     todo = places[~places.id.isin(done)]
-    vo = voyageai.Client()
+    client = genai.Client()
+    config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=DIMS)
     with cache.open("a") as f:
         for i in range(0, len(todo), BATCH):
             chunk = todo.iloc[i:i + BATCH]
-            vecs = vo.embed([embed_text(r) for _, r in chunk.iterrows()], model=MODEL, input_type="document").embeddings
-            for pid, v in zip(chunk.id, vecs):
+            res = client.models.embed_content(
+                model=MODEL,
+                contents=[embed_text(r) for _, r in chunk.iterrows()],
+                config=config,
+            )
+            for pid, emb in zip(chunk.id, res.embeddings):
+                v = l2_normalize(emb.values)
                 done[pid] = v
                 f.write(json.dumps({"id": pid, "v": v}) + "\n")
     out = pd.DataFrame({"id": places.id, "embedding": [done[i] for i in places.id]})
@@ -2237,21 +2262,23 @@ def main():
         with common.engine().begin() as con:
             for pid, v in zip(out.id, out.embedding):
                 con.execute(text("UPDATE places SET embedding = :v WHERE id = :id"), {"v": json.dumps(list(v)), "id": pid})
-    print(f"embeddings: {len(out)} places, model {MODEL}")
+    print(f"embeddings: {len(out)} places, model {MODEL}, dims {DIMS}")
 
 
 if __name__ == "__main__":
     main()
 ```
 
+`genai.Client()` reads `GEMINI_API_KEY` from the environment, which `ingest/common.py` already loads via `python-dotenv`.
+
 - [ ] **Step 4: Run test, smoke, full**
 
-Run: `pytest tests/test_embeddings.py -q` → PASS. `make ingest STEP=08 ARGS="--limit 10 --no-db"` then `make ingest STEP=08`. Verify: `psql -c "select count(*) from places where embedding is not null"`.
+Run: `pytest tests/test_embeddings.py -q` → PASS. `make ingest STEP=08 ARGS="--limit 10 --no-db"` then `make ingest STEP=08`. Verify: `psql -c "select count(*) from places where embedding is not null"`. Also confirm one vector is unit length and 1024 long.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A && git commit -m "feat(ingest): voyage-3 place embeddings into pgvector" && git push
+git add -A && git commit -m "feat(ingest): gemini-embedding-001 place embeddings into pgvector" && git push
 ```
 
 ---
