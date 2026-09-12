@@ -36,11 +36,10 @@ def main():
         df = df.head(args.limit)
     common.save(df, "geo_cells")
     if not args.no_db:
-        eng = common.engine()
-        with eng.begin() as con:
-            con.execute(text("DELETE FROM geo_cells"))
         common.write_table(df.rename(columns={"wkt": "geom"}), "geo_cells_stage")
-        with eng.begin() as con:
+        with common.engine().begin() as con:
+            con.execute(text("DELETE FROM cell_features"))  # child before parent: FKs geo_cells(h3)
+            con.execute(text("DELETE FROM geo_cells"))
             con.execute(text("""INSERT INTO geo_cells (h3, lat, lng, geom)
                                 SELECT h3, lat, lng, ST_GeomFromText(geom, 4326) FROM geo_cells_stage"""))
             con.execute(text("DROP TABLE geo_cells_stage"))
