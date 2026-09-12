@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 from ingest import common
 
-COLS = ["pop_total", "workers_daytime", "poi_density", "restaurants_open", "activity_dinner", "est_rent_psf_yr",
-        "spending_capacity", "transit_daily_trips"]
+COLS = ["pop_total", "median_hh_income", "workers_daytime", "poi_density", "restaurants_open", "activity_dinner",
+        "est_rent_psf_yr", "spending_capacity", "transit_daily_trips"]
 
 # Known-dense, known-active Pittsburgh neighborhoods vs. a quiet outer borough.
 HOT_SPOTS = {
