@@ -1,32 +1,69 @@
 # Forkcast — Tasks
 
-## Phase 0: Planning
-- [x] Brainstorm, write spec `docs/superpowers/specs/2026-09-12-forkcast-design.md`
-- [x] Write foundation plan `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`
+Checkbox state is the source of truth for what is built. Task numbers match
+`docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`.
 
-## Phase 1: Foundation [P1]
-- [ ] Task 1 repo skeleton, docker db, schema, CI
-- [ ] Task 2 contracts + mirrors
-- [ ] Task 3 brain/ team files + agents
-- [ ] Task 4 ingest/common.py + 00_grid
-- [ ] Task 5 01_census_acs
-- [ ] Task 6 02_lodes
-- [ ] Task 7 03_wprdc_food + cuisine_taxonomy.yaml
-- [ ] Task 8 04_osm_pois (+ GTFS)
-- [ ] Task 9 05_google_places
-- [ ] Task 10 07_besttime
-- [ ] Task 11 08_place_embeddings
-- [ ] Task 12 09_spend_capacity
-- [ ] Task 13 10_rent_proxy + rents_manual.csv
-- [ ] Task 14 11_cuisine_affinity
-- [ ] Task 15 12_build_features
-- [ ] Task 16 sanity.py + fixtures
+## Phase 0: Planning — complete
 
-## Phase 2: Backend [P2] — plan to be written after foundation
-- [ ] scoring modules, weights, zones, parser, refine, explainer, reverse, backtest, endpoints
+- [x] Brainstorm the product and confirm scope decisions
+- [x] Write the spec `docs/superpowers/specs/2026-09-12-forkcast-design.md`
+- [x] Write the foundation plan `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`
+- [x] Create the GitHub repo `cylee33/forkcast` and the `data/foundation` branch
 
-## Phase 3: Web [P3] — plan to be written after foundation
-- [ ] skeleton on fixture, map + layers, leaderboard, chips, refine, Why-Here, reverse UI
+## Phase 1: Foundation [P1] — in progress (5 of 16 tasks)
+
+| # | Task | State | Commit |
+|---|---|---|---|
+| 1 | Repo skeleton, Docker DB, schema, CI | [x] done | `9aa27ab`, `df6b557` |
+| 2 | Contracts + Pydantic/TypeScript mirrors | [x] done | `5e17f4d` |
+| 3 | `brain/` team files + `.claude/agents` | [x] done | `f7f1e15` |
+| 4 | `ingest/common.py` + `00_grid.py` | [x] done | `ea0fc68`, `e97b492` |
+| 5 | `01_census_acs.py` | [x] code done, data blocked | `d2c6663` |
+| 6 | `02_lodes.py` | [ ] | |
+| 7 | `03_wprdc_food.py` + `cuisine_taxonomy.yaml` | [ ] | |
+| 8 | `04_osm_pois.py` (+ GTFS) | [ ] | |
+| 9 | `05_google_places.py` | [ ] | |
+| 10 | `07_besttime.py` | [ ] | |
+| 11 | `08_place_embeddings.py` | [ ] | |
+| 12 | `09_spend_capacity.py` | [ ] | |
+| 13 | `10_rent_proxy.py` + `rents_manual.csv` | [ ] | |
+| 14 | `11_cuisine_affinity.py` | [ ] | |
+| 15 | `12_build_features.py` | [ ] | |
+| 16 | `sanity.py` + fixtures | [ ] | |
+
+### Manual tasks for Dev 1, blocking the tasks named
+
+- [ ] Get a free Census API key and put it in `.env` as `CENSUS_API_KEY` — blocks Task 5's data run, and Tasks 12 and 15 downstream
+- [ ] Find the WPRDC food-facilities resource id and put it in `.env` as `WPRDC_FOOD_RESOURCE_ID` — blocks Task 7
+- [ ] Provision `GOOGLE_PLACES_API_KEY` — blocks Task 9
+- [ ] Provision `BESTTIME_API_KEY_PRIVATE` — blocks Task 10's real traffic (the proxy path still runs without it)
+- [ ] Provision `VOYAGE_API_KEY` — blocks Task 11
+- [ ] Hand-collect 20–50 asking rents into `data/rents_manual.csv` — blocks Task 13
+- [ ] Hand-list wholesale suppliers into `data/suppliers_manual.csv` — part of Task 8
+
+## Phase 2: Backend [P2] — plan written after foundation
+
+- [ ] Scoring modules (`demand, competition, traffic, access, spending, cost, supply`)
+- [ ] Weight validator and `analyses` persistence
+- [ ] Zones (connected components, neighborhood names)
+- [ ] Concept parser, refine, explainer
+- [ ] Reverse mode + `concept_archetypes.yaml`
+- [ ] Backtest (Spearman ρ)
+- [ ] Endpoints and `contracts/` validation tests
+
+## Phase 3: Web [P3] — plan written after foundation
+
+- [ ] Skeleton running on `data/fixtures/recommend_sample.json`
+- [ ] Map, hex layer, layer toggles
+- [ ] Leaderboard, profile chips, refine bar
+- [ ] Why-Here panel, competitor panel
+- [ ] Reverse-mode UI
 
 ## Phase 4: Integration [P1]
-- [ ] hour-10 checkpoint, backtest ρ in footer, weight tuning, bug bash, demo rehearsal
+
+- [ ] Hour-10 checkpoint: all three developers on `main`, Korean street-food concept end-to-end
+- [ ] Freeze `contracts/`
+- [ ] Backtest ρ in the footer
+- [ ] Weight tuning
+- [ ] Bug bash against `brain/demo.md`
+- [ ] Demo rehearsal

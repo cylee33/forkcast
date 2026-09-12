@@ -1,5 +1,7 @@
 # Forkcast — Plan
 
+Task-level state lives in `brain/tasks.md`; this file holds the decisions and the schedule.
+
 This plan is derived from the design spec (`docs/superpowers/specs/2026-09-12-forkcast-design.md`, sections 1 and 6) and from the 24-hour build order in `forkcast-proposal.md` §8, with the properties feature removed (cut per decision D7) and reverse mode moved earlier in the schedule (core scope per decision D5).
 
 ## Decisions
@@ -19,6 +21,9 @@ This plan is derived from the design spec (`docs/superpowers/specs/2026-09-12-fo
 | D11 | Local Postgres (PostGIS + pgvector image) in compose. Not Supabase. |
 | D12 | LLM: `claude-sonnet-5` for parse, refine, explain, compare. Embeddings: Voyage `voyage-3`. Recorded in `analyses.model_json`. |
 | D13 | Git repo is created and pushed as **task 1** of foundation. Commit after every completed task. |
+| D14 | Toolchain: `uv` provides Python 3.11 (`make venv`), because the pinned wheels do not build on newer interpreters. Colima or Docker Desktop both work as the container runtime. |
+| D15 | The county grid holds 18,275 H3 res-9 cells, not the ~7,000 the proposal estimated. Anything sized against the old number needs revisiting. |
+| D16 | Foundation execution runs task-by-task through the plan at `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`: one implementer per task, a review after each, findings fixed before the next task starts. |
 
 ## Team Workflow
 
