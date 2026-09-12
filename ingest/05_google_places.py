@@ -104,20 +104,35 @@ def match(wprdc: pd.DataFrame, google: pd.DataFrame) -> pd.DataFrame:
     extra["is_chain"] = extra.name.map(taxonomy.is_chain)
     extra["address"] = None
     extra = common.points_to_h3(extra)
+    # Undo the object-dtype cast above for the numeric columns: masking to None needed an object
+    # dtype to hold it safely, but leaving these as object (vs. extra's native float) is exactly what
+    # makes pd.concat's dtype inference ambiguous over all-NA data. Both sides go back to float64.
+    for col in ("rating", "reviews", "price_level"):
+        m[col] = pd.to_numeric(m[col], errors="coerce")
+        extra[col] = pd.to_numeric(extra[col], errors="coerce")
     cols = ["id", "provider", "provider_id", "name", "lat", "lng", "h3", "categories", "cuisine_key",
             "price_level", "rating", "reviews", "is_chain", "is_open", "source", "summary"]
-    return pd.concat([m[cols], extra[cols]], ignore_index=True)
+    # Exclude empty frames (e.g. extra when nothing is Google-only, or a fully-empty google in the
+    # WPRDC-only fallback) rather than letting pd.concat warn about dtype inference over all-NA data.
+    parts = [f[cols] for f in (m, extra) if len(f)]
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=cols)
 
 
 def fetch_all(cells: list[str]) -> pd.DataFrame:
-    """Parsed Google places across all cells. Falls back to an empty (correctly-columned) frame if the
-    fetch fails outright (e.g. quota exhausted) rather than aborting the whole ingest — match() then
-    degrades cleanly to WPRDC-only rows with source='wprdc'."""
-    try:
-        raw = [parse_place(p) for c in cells for p in fetch_cell(c)]
-    except requests.exceptions.RequestException as e:
-        print(f"google: fetch failed ({e}); writing WPRDC-only places (no Google data)")
-        raw = []
+    """Parsed Google places across all cells. Catches per cell, not around the whole fetch: a quota
+    outage partway through a county run stops the fetch but keeps every place already fetched and
+    paid for, rather than discarding it. match() then blends whatever came back — zero cells fetched
+    degrades fully to the WPRDC-only fallback (source='wprdc' everywhere); a partial county merges
+    just the cells that succeeded, which is honestly different and shows up as some
+    source='wprdc+google' rows rather than none."""
+    raw = []
+    for i, c in enumerate(cells):
+        try:
+            raw.extend(parse_place(p) for p in fetch_cell(c))
+        except requests.exceptions.RequestException as e:
+            print(f"google: fetch stopped at cell {i + 1}/{len(cells)} ({e}); "
+                  f"keeping {len(raw)} places from the {i} cells that succeeded")
+            break
     return pd.DataFrame(raw, columns=GOOGLE_COLS)
 
 

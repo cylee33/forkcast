@@ -57,6 +57,27 @@ def test_fetch_all_falls_back_to_empty_frame_on_request_failure(monkeypatch):
     assert list(out.columns) == g.GOOGLE_COLS
 
 
+def test_fetch_all_keeps_places_fetched_before_a_later_cell_fails(monkeypatch):
+    """A failure partway through a county run must not discard the cells that already succeeded —
+    the exact bug that hit the real run once and will hit it again once quota lifts mid-run."""
+    g = load_script("05_google_places")
+    calls = []
+    ok_place = {"id": "abc", "displayName": {"text": "Golden Dragon"},
+                "location": {"latitude": 40.44, "longitude": -79.99},
+                "businessStatus": "OPERATIONAL", "types": ["restaurant"]}
+
+    def fetch(c):
+        calls.append(c)
+        if c == "fail_me":
+            raise requests.exceptions.RequestException("quota exceeded")
+        return [ok_place]
+
+    monkeypatch.setattr(g, "fetch_cell", fetch)
+    out = g.fetch_all(["cell1", "cell2", "fail_me", "cell4"])
+    assert len(out) == 2  # cell1 and cell2's places survive the later failure
+    assert calls == ["cell1", "cell2", "fail_me"]  # stopped at the failure, never reached cell4
+
+
 def test_match_falls_back_to_wprdc_only_when_google_is_empty():
     """The WPRDC-only fallback: an empty (correctly-columned) google frame — what fetch_all returns
     when Google fetch fails outright — must not crash match() and must produce plain WPRDC rows."""
