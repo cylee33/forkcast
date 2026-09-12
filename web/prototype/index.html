@@ -1729,16 +1729,20 @@ function focusLayers(st) {
   const L = [];
   if (focusVar === 'comp' && focusCache) {
     const rv = focusCache.rivals;
+    // entrance only, then hold still — per-frame radius updates + depth testing
+    // made overlapping translucent circles shimmer
+    const grow = ease(t / 0.9);
     L.push(new deck.ScatterplotLayer({
       id: 'focus-comp', data: rv.all,
       getPosition: d => [d.lng, d.lat],
       getRadius: 300, radiusUnits: 'meters',
-      radiusScale: ease(t / 0.9) * (1 + 0.03 * Math.sin(t * 2)),
+      radiusScale: grow,
       stroked: true, filled: true,
       getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 34] : [176, 96, 63, 16],
       getLineColor: d => rv.direct.includes(d) ? [156, 59, 36, 200] : [176, 96, 63, 110],
       lineWidthMinPixels: 1.5,
-      updateTriggers: { getRadius: [tick] },
+      parameters: { depthTest: false },
+      updateTriggers: { getRadius: [grow < 1 ? tick : 'settled'] },
     }));
     L.push(new deck.ScatterplotLayer({
       id: 'focus-comp-dots', data: rv.all, pickable: true,
@@ -1746,6 +1750,7 @@ function focusLayers(st) {
       getRadius: 26, radiusUnits: 'meters',
       getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 255] : [176, 96, 63, 220],
       stroked: true, getLineColor: [253, 251, 246, 255], lineWidthMinPixels: 2,
+      parameters: { depthTest: false },
     }));
   }
   if (focusVar === 'traffic' && focusCache) {
