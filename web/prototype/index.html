@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forkcast — Where restaurants belong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #F7F2E9;
+    --surface: #FDFBF6;
+    --surface-2: #EEE1DB;
+    --ink: #1F1B16;
+    --sub: #6B6157;
+    --line: #E7DECF;
+    --accent: #C4562E;
+    --accent-deep: #9E4522;
+    --accent-soft: #F6E3D6;
+    --good: #2E6B4F;
+    --selected: #1B64DA;
+    --shadow: 0 1px 2px rgba(31,27,22,.04), 0 10px 30px rgba(31,27,22,.10);
+    --r-lg: 20px;
+    --r-md: 14px;
+    --spring: cubic-bezier(.34,1.56,.64,1);
+    --ease-expo: cubic-bezier(.16,1,.3,1);
+    --serif: "Fraunces", "Tiempos Headline", Georgia, serif;
+    --sans: "Pretendard Variable", Pretendard, Inter, system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); overflow-x: hidden; }
+  ::selection { background: var(--accent-soft); }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; align-items: center; gap: 10px; padding: 16px 28px;
+    background: linear-gradient(rgba(246,241,231,.92), rgba(246,241,231,0));
+    pointer-events: none;
+  }
+  nav .mark { width: 19px; }
+  nav .word { font-family: var(--serif); font-weight: 700; letter-spacing: .08em; font-size: 16px; }
+  nav .word b { color: var(--accent); }
+  nav .chip {
+    margin-left: auto; font-size: 11.5px; letter-spacing: .06em; color: var(--sub);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
+    background: var(--surface); pointer-events: auto; box-shadow: var(--shadow);
+  }
+  nav { transition: opacity .3s ease; }
+  nav.off { opacity: 0; pointer-events: none; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    position: relative; padding: 24px; background: var(--bg);
+  }
+  .hero::before, .hero::after {
+    content: ""; position: absolute; left: 8%; right: 8%; height: 1px; background: var(--line);
+  }
+  .hero::before { top: 84px; }
+  .hero::after { bottom: 84px; }
+  .hero .kicker {
+    font-size: 12px; letter-spacing: .28em; color: var(--sub); margin-bottom: 30px; opacity: 0;
+  }
+  .play .kicker { animation: rise .6s ease .1s forwards; }
+
+  .logo-stage { position: relative; height: 140px; display: flex; align-items: flex-end; justify-content: center; }
+  .logo {
+    font-family: var(--serif); font-weight: 600;
+    font-variation-settings: "opsz" 120, "SOFT" 0, "WONK" 0;
+    font-size: clamp(48px, 9.5vw, 104px); letter-spacing: -0.02em;
+    display: flex; align-items: baseline; position: relative; color: var(--ink);
+  }
+  .logo .lt { opacity: 0; transform: translateY(18px); display: inline-block; }
+  .play .logo .lt { animation: rise .5s var(--spring) forwards; }
+  .play .logo .lt:nth-child(1) { animation-delay: .05s; }
+  .play .logo .lt:nth-child(2) { animation-delay: .11s; }
+  .play .logo .lt:nth-child(3) { animation-delay: .17s; }
+  .play .logo .lt:nth-child(4) { animation-delay: .23s; }
+  .play .logo .lt:nth-child(5) { animation-delay: .29s; }
+  .play .logo .lt:nth-child(6) { animation-delay: .35s; }
+  .play .logo .lt:nth-child(7) { animation-delay: .41s; }
+  .play .logo .lt:nth-child(8) { animation-delay: .47s; }
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+
+  .flap { position: relative; display: inline-block; perspective: 520px; }
+  .flap .face { display: inline-block; backface-visibility: hidden; }
+  .flap .face.k {
+    position: absolute; inset: 0; color: var(--accent);
+    transform: rotateX(95deg); transform-origin: 50% 0%;
+  }
+  .play .flap .face.e { animation: flapOut .3s ease-in 1.75s forwards; transform-origin: 50% 100%; }
+  .play .flap .face.k { animation: flapIn .38s var(--spring) 2.02s forwards; }
+  @keyframes flapOut { to { transform: rotateX(-95deg); opacity: 0; } }
+  @keyframes flapIn { to { transform: rotateX(0deg); } }
+
+  .pin {
+    position: absolute; left: 50%; top: -30px; width: 28px;
+    transform: translate(-50%, -140px); opacity: 0; z-index: 2;
+    filter: drop-shadow(0 8px 18px rgba(196,98,45,.35));
+  }
+  .play .pin { animation: pinDrop .5s cubic-bezier(.55,0,.65,1.4) 1.45s forwards; }
+  @keyframes pinDrop {
+    0% { transform: translate(-50%, -140px); opacity: 0; }
+    35% { opacity: 1; }
+    100% { transform: translate(-50%, 0); opacity: 1; }
+  }
+  .ring {
+    position: absolute; left: 50%; bottom: -10px; width: 14px; height: 14px;
+    border: 1.5px solid var(--ink); border-radius: 50%;
+    transform: translateX(-50%) scale(0); opacity: 0;
+  }
+  .play .ring { animation: ripple .9s ease-out 1.95s forwards; }
+  @keyframes ripple {
+    0% { transform: translateX(-50%) scale(.3); opacity: .7; }
+    100% { transform: translateX(-50%) scale(7); opacity: 0; }
+  }
+
+  .tagline {
+    margin-top: 30px; font-family: var(--serif); font-style: italic; font-weight: 500;
+    font-size: clamp(16px, 2.6vw, 21px); color: var(--sub); opacity: 0; line-height: 1.55;
+  }
+  .tagline b { color: var(--ink); font-style: normal; }
+  .play .tagline { animation: rise .6s ease 2.5s forwards; }
+
+  .cta-row { margin-top: 36px; display: flex; gap: 12px; opacity: 0; }
+  .play .cta-row { animation: rise .6s ease 2.75s forwards; }
+  .btn {
+    font: 600 14.5px var(--sans); cursor: pointer; border-radius: 999px; padding: 14px 26px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    transition: transform .18s var(--spring), box-shadow .18s ease;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .hero .foot { position: absolute; bottom: 40px; font-size: 12px; color: var(--sub); letter-spacing: .12em; }
+
+  /* ---------- app ---------- */
+  .app { position: relative; height: 100vh; background: var(--bg); }
+  #map { position: absolute; inset: 0; }
+  .panel {
+    position: absolute; z-index: 10; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+  }
+
+  /* mode toggle — Toss segmented control */
+  .mode-toggle {
+    top: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; padding: 5px; border-radius: 999px; gap: 2px;
+  }
+  .mode-toggle button {
+    position: relative; z-index: 1; border: none; background: none; cursor: pointer;
+    font: 600 13.5px var(--sans); color: var(--sub); padding: 10px 20px; border-radius: 999px;
+    transition: color .25s ease;
+  }
+  .mode-toggle button.on { color: var(--surface); }
+  .mode-thumb {
+    position: absolute; top: 5px; bottom: 5px; border-radius: 999px; background: var(--ink);
+    transition: left .3s var(--spring), width .3s var(--spring); z-index: 0;
+  }
+
+  /* left card */
+  .control { top: 18px; left: 18px; width: 306px; padding: 20px; }
+  .control h3 {
+    font-family: var(--serif); font-size: 15px; letter-spacing: .06em; margin-bottom: 14px;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .control h3 b { color: var(--accent); }
+  .control h3 .loc { font: 400 11px var(--sans); color: var(--sub); letter-spacing: .02em; }
+  .step { margin-bottom: 16px; }
+  .step label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sub); margin-bottom: 8px; }
+  .step label .n {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--line);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: var(--ink); transition: background .25s, color .25s;
+  }
+  .step.done label .n { background: var(--ink); color: var(--surface); }
+  .concept-input {
+    width: 100%; background: var(--bg); border: 1.5px solid var(--line);
+    border-radius: var(--r-md); padding: 12px 13px; color: var(--ink); font: 500 14px var(--sans);
+    outline: none; transition: border-color .2s;
+  }
+  .concept-input:focus { border-color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chips button {
+    font: 500 12px var(--sans); color: var(--sub); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px; cursor: pointer;
+    transition: all .18s var(--spring);
+  }
+  .chips button:hover { color: var(--ink); border-color: var(--ink); transform: translateY(-1px); }
+  .hint { font-size: 11.5px; color: var(--sub); line-height: 1.5; }
+  .hint.pin-set { color: var(--accent-deep); font-weight: 600; }
+  input[type="range"] { width: 100%; accent-color: var(--ink); }
+  .range-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--sub); margin-top: 4px; }
+  .analyze {
+    width: 100%; margin-top: 4px; padding: 14px; border: none; border-radius: 999px;
+    font: 700 14.5px var(--sans); cursor: pointer; color: var(--surface); background: var(--ink);
+    transition: opacity .2s, transform .18s var(--spring); letter-spacing: .01em;
+  }
+  .analyze:disabled { opacity: .3; cursor: not-allowed; }
+  .analyze:not(:disabled):hover { transform: translateY(-2px); }
+  .scanning { display: none; margin-top: 12px; font-size: 12px; color: var(--sub); }
+  .scanning .bar { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 7px; }
+  .scanning .bar i {
+    display: block; height: 100%; width: 40%; background: var(--ink);
+    animation: scan 1s linear infinite;
+  }
+  @keyframes scan { 0% { transform: translateX(-100%);} 100% { transform: translateX(350%);} }
+
+  .weights { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; display: none; }
+  .weights h4 { font-size: 10.5px; letter-spacing: .14em; color: var(--sub); margin-bottom: 9px; }
+  .wrow { display: grid; grid-template-columns: 86px 1fr 28px; gap: 8px; align-items: center; font-size: 11.5px; margin-bottom: 6px; }
+  .wrow span:last-child { text-align: right; color: var(--sub); font-variant-numeric: tabular-nums; }
+
+  /* reverse mode card */
+  .reverse-hint { font-size: 13px; color: var(--sub); line-height: 1.6; }
+  .rev-result { display: none; }
+  .rev-addr { font-family: var(--serif); font-size: 17px; font-weight: 600; margin: 4px 0 2px; }
+  .rev-sub { font-size: 11.5px; color: var(--sub); margin-bottom: 12px; }
+  .fit-row {
+    display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center;
+    padding: 10px 8px; border-radius: var(--r-md); cursor: default;
+    opacity: 0; transform: translateY(10px); transition: opacity .4s ease, transform .4s var(--spring);
+  }
+  .fit-row.in { opacity: 1; transform: none; }
+  .fit-row:hover { background: var(--bg); }
+  .fit-row .em { font-size: 19px; }
+  .fit-row .nm { font-weight: 600; font-size: 13.5px; }
+  .fit-row .rs { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .fit-row .pct { font-family: var(--serif); font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .fit-track { grid-column: 2 / 4; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .fit-fill { height: 100%; width: 0; border-radius: 3px; background: var(--accent); transition: width .7s cubic-bezier(.2,.8,.2,1); }
+
+  /* right: results */
+  .results {
+    top: 18px; right: 18px; width: 336px; max-height: calc(100vh - 36px);
+    display: none; flex-direction: column; overflow: hidden;
+  }
+  .results header { padding: 18px 20px 10px; }
+  .results header h3 { font-family: var(--serif); font-size: 16px; letter-spacing: .04em; }
+  .results header p { font-size: 11.5px; color: var(--sub); margin-top: 4px; }
+  .street-list { overflow-y: auto; padding: 6px 12px 16px; }
+  .street-card {
+    display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center;
+    padding: 13px 12px; border-radius: var(--r-md); cursor: pointer; border: 1px solid transparent;
+    transition: background .18s, border-color .18s, transform .3s var(--spring);
+    opacity: 0; transform: translateX(24px);
+  }
+  .street-card.in { opacity: 1; transform: translateX(0); }
+  .street-card:hover, .street-card.active { background: var(--bg); border-color: var(--line); }
+  .street-card .rank {
+    width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font: 800 14px var(--sans); color: var(--surface); background: var(--ink);
+  }
+  .street-card:first-child .rank { background: var(--accent); }
+  .street-card .nm { font-weight: 700; font-size: 13.5px; }
+  .street-card .nick { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .street-card .grade { font-family: var(--serif); font-weight: 700; font-size: 19px; text-align: right; }
+  .street-card .score { font-size: 10px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* why / street detail */
+  .why { display: none; flex-direction: column; overflow: hidden; }
+  .why header { padding: 18px 20px 8px; }
+  .why .back { font: 600 11.5px var(--sans); color: var(--sub); background: none; border: none; cursor: pointer; padding: 0 0 10px; }
+  .why .back:hover { color: var(--ink); }
+  .why h3 { font-family: var(--serif); font-size: 19px; }
+  .why .sub { font-size: 11.5px; color: var(--sub); margin-top: 3px; }
+  .why .grade-big { float: right; font-family: var(--serif); font-weight: 700; font-size: 34px; color: var(--accent); }
+  .metrics { padding: 10px 20px 8px; overflow-y: auto; }
+  .metric { margin-bottom: 13px; opacity: 0; transform: translateY(10px); transition: opacity .4s ease, transform .4s ease; }
+  .metric.in { opacity: 1; transform: none; }
+  .metric .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+  .metric .row .lb span { color: var(--sub); }
+  .metric .row .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .metric .track { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .metric .fill {
+    height: 100%; width: 0; border-radius: 3px; background: var(--accent);
+    transition: width .8s cubic-bezier(.2,.8,.2,1);
+  }
+  .storefronts { padding: 4px 20px 10px; }
+  .storefronts h4 { font-size: 10.5px; letter-spacing: .14em; color: var(--sub); margin: 8px 0 8px; }
+  .sf {
+    border: 1px solid var(--line); border-radius: var(--r-md); padding: 11px 13px; margin-bottom: 8px;
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center;
+    opacity: 0; transform: translateY(10px); transition: opacity .4s ease, transform .4s var(--spring);
+    background: var(--surface);
+  }
+  .sf.in { opacity: 1; transform: none; }
+  .sf .tag {
+    width: 20px; height: 20px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-deep);
+    font: 800 11px var(--sans); display: flex; align-items: center; justify-content: center;
+  }
+  .sf .ad { font-weight: 700; font-size: 12.5px; }
+  .sf .wh { font-size: 10.5px; color: var(--sub); margin-top: 2px; }
+  .sf .rent { font-family: var(--serif); font-weight: 700; font-size: 13.5px; text-align: right; }
+  .sf .sq { font-size: 10px; color: var(--sub); text-align: right; }
+  .why .note { padding: 4px 20px 18px; font-size: 10.5px; color: var(--sub); line-height: 1.55; }
+
+  /* legend + disclaimer */
+  .legend { bottom: 20px; left: 18px; padding: 13px 16px; font-size: 11px; color: var(--sub); }
+  .legend .dots { display: flex; gap: 5px; margin: 8px 0 5px; align-items: center; }
+  .legend .dots i { border-radius: 50%; display: inline-block; }
+  .legend .lr { display: flex; justify-content: space-between; }
+  .disclaimer { bottom: 20px; right: 18px; padding: 10px 15px; font-size: 10.5px; color: var(--sub); }
+  .disclaimer b { color: var(--accent-deep); font-weight: 700; }
+
+  /* markers */
+  .rank-marker {
+    width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font: 800 14px var(--sans); color: var(--surface); background: var(--ink); cursor: pointer;
+    border: 2.5px solid var(--surface); box-shadow: 0 6px 18px rgba(28,25,19,.3);
+    animation: markerDrop .55s var(--spring) both;
+  }
+  .rank-marker.first { background: var(--accent); }
+  @keyframes markerDrop {
+    0% { transform: translateY(-70px) scale(.6); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  .sf-marker {
+    min-width: 22px; height: 22px; border-radius: 7px; padding: 0 4px;
+    background: var(--accent-soft); color: var(--accent-deep); border: 1.5px solid var(--accent);
+    font: 800 11px var(--sans); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(28,25,19,.18); animation: markerDrop .45s var(--spring) both;
+  }
+  .center-pin-el { width: 30px; filter: drop-shadow(0 6px 14px rgba(28,25,19,.3)); }
+
+  .maplibregl-ctrl-attrib { background: rgba(246,241,231,.7) !important; }
+  .deck-tooltip {
+    background: var(--surface) !important; border: 1px solid var(--line) !important;
+    border-radius: 10px !important; color: var(--ink) !important; font: 600 11px var(--sans) !important;
+    padding: 7px 10px !important; box-shadow: var(--shadow) !important;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <svg class="mark" viewBox="0 0 24 32" fill="none">
+    <path d="M12 1C6 1 1.5 5.6 1.5 11.6 1.5 19 12 30.5 12 30.5S22.5 19 22.5 11.6C22.5 5.6 18 1 12 1Z" fill="#C4622D"/>
+    <path d="M9 6v4.2M12 6v4.2M15 6v4.2M9 10.2h6c0 1.6-1 2.6-2.2 2.9V19h-1.6v-5.9C10 12.8 9 11.8 9 10.2Z" stroke="#F6F1E7" stroke-width="1.7" stroke-linecap="round"/>
+  </svg>
+  <span class="word">FOR<b>K</b>CAST</span>
+  <span class="chip">HackCMU 2026 · Food track</span>
+</nav>
+
+<!-- ================= HERO ================= -->
+<section class="hero play" id="hero">
+  <div class="kicker">SITE SELECTION, FORECASTED</div>
+
+  <div class="logo-stage">
+    <div class="logo">
+      <span class="lt">F</span><span class="lt">o</span><span class="lt">r</span><span class="lt flap"><span class="face e">e</span><span class="face k">k</span><svg class="pin" viewBox="0 0 24 32" fill="none"><path d="M12 1C6 1 1.5 5.6 1.5 11.6 1.5 19 12 30.5 12 30.5S22.5 19 22.5 11.6C22.5 5.6 18 1 12 1Z" fill="#C4622D"/><path d="M9 6v4.2M12 6v4.2M15 6v4.2M9 10.2h6c0 1.6-1 2.6-2.2 2.9V19h-1.6v-5.9C10 12.8 9 11.8 9 10.2Z" stroke="#F6F1E7" stroke-width="1.7" stroke-linecap="round"/></svg><span class="ring"></span></span><span class="lt">c</span><span class="lt">a</span><span class="lt">s</span><span class="lt">t</span>
+    </div>
+  </div>
+
+  <p class="tagline">Tell us the restaurant you dream of.<br/>We hand back <b>a street, a building, and the reasons.</b></p>
+
+  <div class="cta-row">
+    <a class="btn primary" href="#app">Find my spot ↓</a>
+    <button class="btn" onclick="replayLogo()">Replay</button>
+  </div>
+
+  <div class="foot">DEMAND · COMPETITION · TRAFFIC · RENT — RANKED BY A SURVIVAL MODEL</div>
+</section>
+
+<!-- ================= APP ================= -->
+<section class="app" id="app">
+  <div id="map"></div>
+
+  <!-- mode toggle -->
+  <div class="panel mode-toggle" id="modeToggle">
+    <div class="mode-thumb" id="modeThumb"></div>
+    <button id="modeBtn1" class="on" onclick="setMode(1)">Find a spot</button>
+    <button id="modeBtn2" onclick="setMode(2)">What fits here?</button>
+  </div>
+
+  <!-- left card: mode 1 -->
+  <div class="panel control" id="control1">
+    <h3>FOR<b>K</b>CAST <span class="loc">Pittsburgh</span></h3>
+
+    <div class="step" id="step1">
+      <label><span class="n">1</span> What do you want to open?</label>
+      <input class="concept-input" id="concept" placeholder="e.g. frozen yogurt shop" />
+      <div class="chips">
+        <button onclick="setConcept('Frozen yogurt shop')">🍦 Frozen yogurt</button>
+        <button onclick="setConcept('Korean fried chicken')">🍗 K-fried chicken</button>
+        <button onclick="setConcept('Third-wave coffee bar')">☕ Coffee bar</button>
+      </div>
+    </div>
+
+    <div class="step" id="step2">
+      <label><span class="n">2</span> Drop your pin</label>
+      <div class="hint" id="pinHint">Click anywhere on the map to set a search center</div>
+    </div>
+
+    <div class="step" id="step3">
+      <label><span class="n">3</span> Search radius</label>
+      <input type="range" id="radius" min="600" max="3000" step="100" value="1500" />
+      <div class="range-row"><span>0.6 km</span><span id="radiusVal" style="color:var(--ink);font-weight:700">1.5 km</span><span>3.0 km</span></div>
+    </div>
+
+    <button class="analyze" id="analyzeBtn" disabled onclick="analyze()">Find my street</button>
+    <div class="scanning" id="scanning">Scoring <span id="cellCount">—</span> squares on the board…<div class="bar"><i></i></div></div>
+
+    <div class="weights" id="weights">
+      <h4>SCORE WEIGHTS — DRAG TO RE-RANK</h4>
+      <div class="wrow"><span>Demand</span><input type="range" id="wD" min="0" max="100" value="35" oninput="reWeight()"><span id="wDv">35</span></div>
+      <div class="wrow"><span>Competition</span><input type="range" id="wC" min="0" max="100" value="25" oninput="reWeight()"><span id="wCv">25</span></div>
+      <div class="wrow"><span>Foot traffic</span><input type="range" id="wT" min="0" max="100" value="25" oninput="reWeight()"><span id="wTv">25</span></div>
+      <div class="wrow"><span>Spending</span><input type="range" id="wS" min="0" max="100" value="15" oninput="reWeight()"><span id="wSv">15</span></div>
+    </div>
+  </div>
+
+  <!-- left card: mode 2 (reverse) -->
+  <div class="panel control" id="control2" style="display:none">
+    <h3>What fits <b>here</b>? <span class="loc">reverse mode</span></h3>
+    <p class="reverse-hint" id="revHint">Click a building or corner on the map.<br/>We rank the restaurant concepts most likely to <b>survive at that exact spot</b> — and say why.</p>
+    <div class="rev-result" id="revResult">
+      <div class="rev-addr" id="revAddr">—</div>
+      <div class="rev-sub" id="revSub">—</div>
+      <div id="fitList"></div>
+    </div>
+  </div>
+
+  <!-- right: ranked streets -->
+  <div class="panel results" id="results">
+    <header>
+      <h3>Top streets</h3>
+      <p id="resultsSub">for “—”</p>
+    </header>
+    <div class="street-list" id="streetList"></div>
+  </div>
+
+  <!-- right: street detail -->
+  <div class="panel results why" id="why">
+    <header>
+      <button class="back" onclick="closeWhy()">← Back to streets</button>
+      <div class="grade-big" id="whyGrade">A</div>
+      <h3 id="whyName">—</h3>
+      <div class="sub" id="whyNick">—</div>
+    </header>
+    <div class="metrics" id="whyMetrics"></div>
+    <div class="storefronts" id="storefronts"></div>
+    <div class="note">Rankings are deterministic — the model narrates only numbers the engine computed. Storefront candidates are placeholders until the county-parcel join lands.</div>
+  </div>
+
+  <div class="panel legend">
+    <div>Opportunity per square</div>
+    <div class="dots" id="legendDots"></div>
+    <div class="lr"><span>quiet</span><span>prime</span></div>
+  </div>
+
+  <div class="panel disclaimer" id="disclaimer"><b>PROTOTYPE</b> · synthetic scores — model integration pending</div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/deck.gl@9.0.36/dist.min.js"></script>
+<script>
+/* ============ logo ============ */
+function replayLogo() {
+  const h = document.getElementById('hero');
+  h.classList.remove('play'); void h.offsetWidth; h.classList.add('play');
+}
+
+/* ============ helpers ============ */
+function hash01(str) {
+  let x = 2166136261;
+  for (let i = 0; i < str.length; i++) { x ^= str.charCodeAt(i); x = Math.imul(x, 16777619); }
+  return ((x >>> 0) % 10000) / 10000;
+}
+const km = (a, b) => {
+  const R = 6371, dLa = (b[0]-a[0])*Math.PI/180, dLo = (b[1]-a[1])*Math.PI/180;
+  const s = Math.sin(dLa/2)**2 + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+};
+const gauss = (d, sigma) => Math.exp(-(d*d)/(2*sigma*sigma));
+function countUp(el, target, suffix = '', dur = 700) {
+  const t0 = performance.now();
+  const tick = (t) => {
+    const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * e) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+/* ============ synthetic model (fallback outside fixture area) ============ */
+const HOTSPOTS = [
+  ['Craig Street',   40.4444, -79.9489, 1.00, .85, .55],
+  ['Forbes Avenue',  40.4413, -79.9568, .95, .95, .45],
+  ['Walnut Street',  40.4512, -79.9337, .70, .70, .95],
+  ['Butler Street',  40.4653, -79.9611, .65, .60, .80],
+  ['East Carson',    40.4288, -79.9763, .60, .80, .55],
+  ['Penn Ave (Strip)',40.4520, -79.9750, .55, .65, .70],
+  ['Market Square',  40.4417, -79.9959, .60, .90, .65],
+  ['Murray Avenue',  40.4382, -79.9227, .65, .60, .85],
+  ['Liberty Avenue', 40.4622, -79.9480, .55, .55, .65],
+];
+const UNIS = [[40.4433,-79.9436],[40.4444,-79.9608]];
+
+function cellComponents(h3id, concept) {
+  const [lat, lng] = h3.cellToLatLng(h3id);
+  let D = 0, T = 0, S = 0;
+  for (const [, hlat, hlng, d, t, s] of HOTSPOTS) {
+    const g = gauss(km([lat,lng],[hlat,hlng]), 0.42);
+    D = Math.max(D, d*g); T = Math.max(T, t*g); S = Math.max(S, s*g);
+  }
+  const uniProx = Math.max(...UNIS.map(u => gauss(km([lat,lng],u), 0.8)));
+  const incumbents = T * (0.55 + 0.9 * hash01(h3id + concept.slice(0,4)));
+  const C = Math.max(0, 1 - incumbents * 0.85);
+  const n = (hash01(h3id + concept) - 0.5) * 0.18;
+  return {
+    D: Math.min(1, Math.max(0, D + uniProx*0.25 + n)),
+    C: Math.min(1, Math.max(0, C + n*0.5)),
+    T: Math.min(1, Math.max(0, T + n)),
+    S: Math.min(1, Math.max(0, S + n*0.6)),
+    lat, lng, uniProx,
+  };
+}
+function totalScore(c, w) {
+  const sum = w.D + w.C + w.T + w.S || 1;
+  return (c.D*w.D + c.C*w.C + c.T*w.T + c.S*w.S) / sum;
+}
+function getWeights() { return { D: +wD.value, C: +wC.value, T: +wT.value, S: +wS.value }; }
+
+/* warm sequential ramp — light sand -> deep terracotta (reads on cream, colorblind-safe single hue family) */
+const RAMP = [[240,220,194],[227,185,138],[205,138,86],[168,91,50],[111,59,31]];
+function rampColor(t) {
+  const x = Math.min(.999, Math.max(0, t)) * (RAMP.length - 1);
+  const i = Math.floor(x), f = x - i, a = RAMP[i], b = RAMP[i+1];
+  return [a[0]+(b[0]-a[0])*f, a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f];
+}
+// legend dots
+(() => {
+  const wrap = document.getElementById('legendDots');
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6, [r, g, b] = rampColor(t), d = document.createElement('i');
+    const px = 8 + t * 6;
+    d.style.cssText = `width:${px}px;height:${px}px;border-radius:2.5px;background:rgb(${r|0},${g|0},${b|0})`;
+    wrap.appendChild(d);
+  }
+})();
+
+/* ============ streets (hand-digitized demo geometries; swap for OSM extract) ============ */
+const STREETS = [
+  { name: 'S Craig Street',  hood: 'Oakland',       range: [280, 480],  path: [[-79.9492,40.4432],[-79.9490,40.4452],[-79.9488,40.4472],[-79.9487,40.4486]] },
+  { name: 'Forbes Avenue',   hood: 'Oakland',       range: [3600, 4000],path: [[-79.9622,40.4413],[-79.9575,40.4416],[-79.9532,40.4424],[-79.9494,40.4436]] },
+  { name: 'Walnut Street',   hood: 'Shadyside',     range: [5400, 5880],path: [[-79.9378,40.4510],[-79.9340,40.4514],[-79.9302,40.4517]] },
+  { name: 'Butler Street',   hood: 'Lawrenceville', range: [3500, 4700],path: [[-79.9662,40.4644],[-79.9612,40.4655],[-79.9560,40.4668]] },
+  { name: 'E Carson Street', hood: 'South Side',    range: [1000, 2200],path: [[-79.9842,40.4282],[-79.9762,40.4288],[-79.9682,40.4293]] },
+  { name: 'Murray Avenue',   hood: 'Squirrel Hill', range: [1900, 2300],path: [[-79.9223,40.4338],[-79.9227,40.4380],[-79.9231,40.4420]] },
+  { name: 'Penn Avenue',     hood: 'Strip District',range: [2000, 2900],path: [[-79.9802,40.4498],[-79.9752,40.4517],[-79.9702,40.4534]] },
+  { name: 'Liberty Avenue',  hood: 'Bloomfield',    range: [4400, 4800],path: [[-79.9522,40.4610],[-79.9480,40.4622],[-79.9440,40.4632]] },
+];
+
+/* ============ map ============ */
+const CENTER0 = [-79.9530, 40.4440];
+let map, overlay;
+function initMap() {
+  map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    center: CENTER0, zoom: 13.2, pitch: 0,
+    attributionControl: { compact: true },
+  });
+  // warm-paper repaint of Positron (runtime patch — survives style updates)
+  map.on('style.load', () => {
+    const set = (id, prop, v) => { try { map.setPaintProperty(id, prop, v); } catch {} };
+    set('background', 'background-color', '#F7F2E9');
+    for (const l of map.getStyle().layers) {
+      if (l.type === 'fill') {
+        if (/water/.test(l.id)) set(l.id, 'fill-color', '#E1D9C4');
+        else if (/(park|green|landcover|landuse|wood|grass)/.test(l.id)) set(l.id, 'fill-color', 'rgba(226,224,196,0.45)');
+        else if (/building/.test(l.id)) set(l.id, 'fill-color', '#EFE7D6');
+      }
+      if (l.type === 'line') {
+        if (/_case|tunnel_path|road_path|bridge_path/.test(l.id)) set(l.id, 'line-color', '#E7DECF');
+        else if (/road|bridge|tunnel/.test(l.id)) set(l.id, 'line-color', '#FDFBF6');
+        else if (/waterway/.test(l.id)) set(l.id, 'line-color', '#D8CFB8');
+        else if (/boundary/.test(l.id)) set(l.id, 'line-color', '#D9C9B3');
+      }
+      if (l.type === 'symbol') {
+        set(l.id, 'text-color', '#6B6157');
+        set(l.id, 'text-halo-color', 'rgba(247,242,233,0.85)');
+      }
+    }
+  });
+  overlay = new deck.MapboxOverlay({ interleaved: false, layers: [] });
+  map.addControl(overlay);
+
+  map.on('click', onMapClick);
+  map.on('load', () => {
+    // preset for a fast pitch: pin on Craig St, concept filled
+    center = [40.4444, -79.9489];
+    placeCenterPin();
+    document.getElementById('pinHint').textContent = 'Pin preset: Craig Street — click map to move';
+    document.getElementById('pinHint').classList.add('pin-set');
+    document.getElementById('step2').classList.add('done');
+    setConcept('Frozen yogurt shop');
+    render();
+  });
+}
+initMap();
+
+/* ============ state ============ */
+let uiMode = 1;
+let center = null, centerMarker = null;
+let board = [], revealWave = -1;
+let rankedStreets = [], selectedStreet = null, hoveredStreet = null;
+let streetMarkers = [], sfMarkers = [];
+let revMarker = null;
+
+let FIXTURE = null, fixtureCentroid = null, mode = 'synthetic', weightsTouched = false;
+fetch('/data/fixtures/recommend_sample.json')
+  .then(r => (r.ok ? r.json() : null))
+  .then(j => {
+    if (!j || !j.cells) return;
+    FIXTURE = j;
+    FIXTURE._pts = j.cells.features.map(f => {
+      const [lat, lng] = h3.cellToLatLng(f.properties.h3);
+      return { lat, lng, p: f.properties };
+    });
+    fixtureCentroid = [
+      FIXTURE._pts.reduce((s, p) => s + p.lat, 0) / FIXTURE._pts.length,
+      FIXTURE._pts.reduce((s, p) => s + p.lng, 0) / FIXTURE._pts.length,
+    ];
+  })
+  .catch(() => {});
+
+/* score sampler used for streets + reverse mode: fixture when close, synthetic otherwise */
+function sampleAt(lat, lng, concept) {
+  if (FIXTURE && fixtureCentroid && km([lat, lng], fixtureCentroid) < 1.8) {
+    let best = null, bd = 1e9;
+    for (const pt of FIXTURE._pts) {
+      const d = km([lat, lng], [pt.lat, pt.lng]);
+      if (d < bd) { bd = d; best = pt; }
+    }
+    if (best && bd < 0.35) {
+      const p = best.p;
+      const uniProx = Math.max(...UNIS.map(u => gauss(km([lat,lng],u), 0.8)));
+      return {
+        real: true,
+        comp: { D: p.D/100, C: p.C/100, T: p.T/100, S: p.S_spend/100, lat, lng, uniProx },
+        score: p.total/100,
+      };
+    }
+  }
+  const id = h3.latLngToCell(lat, lng, 9);
+  const comp = cellComponents(id, concept);
+  return { real: false, comp, score: totalScore(comp, getWeights()) };
+}
+
+/* ============ mode toggle ============ */
+function setMode(m) {
+  uiMode = m;
+  document.getElementById('modeBtn1').classList.toggle('on', m === 1);
+  document.getElementById('modeBtn2').classList.toggle('on', m === 2);
+  positionThumb();
+  document.getElementById('control1').style.display = m === 1 ? 'block' : 'none';
+  document.getElementById('control2').style.display = m === 2 ? 'block' : 'none';
+  document.getElementById('results').style.display = (m === 1 && rankedStreets.length && selectedStreet === null) ? 'flex' : 'none';
+  document.getElementById('why').style.display = 'none';
+  if (m === 1 && selectedStreet !== null) { selectedStreet = null; }
+  if (m === 2) { clearStreetMarkers(); clearSfMarkers(); }
+  else if (rankedStreets.length) dropStreetMarkers();
+  if (revMarker && m === 1) { revMarker.remove(); revMarker = null; document.getElementById('revResult').style.display = 'none'; document.getElementById('revHint').style.display = 'block'; }
+  render();
+}
+function positionThumb() {
+  const btn = document.getElementById(uiMode === 1 ? 'modeBtn1' : 'modeBtn2');
+  const thumb = document.getElementById('modeThumb');
+  thumb.style.left = btn.offsetLeft + 'px';
+  thumb.style.width = btn.offsetWidth + 'px';
+}
+window.addEventListener('load', positionThumb);
+window.addEventListener('resize', positionThumb);
+window.addEventListener('scroll', () => {
+  document.querySelector('nav').classList.toggle('off', window.scrollY > window.innerHeight * 0.5);
+});
+
+/* ============ pins & clicks ============ */
+const pinEl = () => {
+  const d = document.createElement('div');
+  d.innerHTML = '<svg class="center-pin-el" viewBox="0 0 24 32" fill="none"><path d="M12 1C6 1 1.5 5.6 1.5 11.6 1.5 19 12 30.5 12 30.5S22.5 19 22.5 11.6C22.5 5.6 18 1 12 1Z" fill="#1C1913"/><circle cx="12" cy="11.5" r="4" fill="#F6F1E7"/></svg>';
+  return d.firstChild;
+};
+function placeCenterPin() {
+  if (centerMarker) centerMarker.remove();
+  centerMarker = new maplibregl.Marker({ element: pinEl(), anchor: 'bottom' })
+    .setLngLat([center[1], center[0]]).addTo(map);
+}
+function onMapClick(e) {
+  if (e.originalEvent.target.closest('.rank-marker,.sf-marker')) return;
+  if (uiMode === 1) {
+    center = [e.lngLat.lat, e.lngLat.lng];
+    placeCenterPin();
+    const h = document.getElementById('pinHint');
+    h.textContent = `Pin set at ${center[0].toFixed(4)}, ${center[1].toFixed(4)} — re-click to move`;
+    h.classList.add('pin-set');
+    document.getElementById('step2').classList.add('done');
+    updateAnalyzeState(); render();
+  } else {
+    reverseAt(e.lngLat.lat, e.lngLat.lng);
+  }
+}
+
+const conceptInput = document.getElementById('concept');
+function setConcept(t) { conceptInput.value = t; conceptInput.dispatchEvent(new Event('input')); }
+conceptInput.addEventListener('input', () => {
+  document.getElementById('step1').classList.toggle('done', conceptInput.value.trim().length > 2);
+  updateAnalyzeState();
+});
+document.getElementById('radius').addEventListener('input', (e) => {
+  document.getElementById('radiusVal').textContent = (e.target.value/1000).toFixed(1) + ' km';
+  render();
+});
+function updateAnalyzeState() {
+  document.getElementById('analyzeBtn').disabled = !(center && conceptInput.value.trim().length > 2);
+}
+
+/* ============ mode 1: analyze ============ */
+/* the board: a go-board square lattice (~170 m), each square scored like a move worth playing */
+const BOARD_STEP_M = 170;
+function analyze() {
+  const concept = conceptInput.value.trim();
+  const radM = +document.getElementById('radius').value;
+  weightsTouched = false;
+
+  const latStep = BOARD_STEP_M / 111320;
+  const lngStep = BOARD_STEP_M / (111320 * Math.cos(center[0] * Math.PI / 180));
+  const n = Math.ceil(radM / BOARD_STEP_M);
+  const g = 0.94; // shrink factor: thin cream gaps between squares = board lines
+  board = [];
+  for (let iy = -n; iy <= n; iy++) {
+    for (let ix = -n; ix <= n; ix++) {
+      const lat = center[0] + iy * latStep, lng = center[1] + ix * lngStep;
+      if (km([lat, lng], center) * 1000 > radM) continue;
+      const s = sampleAt(lat, lng, concept);
+      board.push({
+        lat, lng, comp: s.comp, real: s.real,
+        wave: Math.max(Math.abs(ix), Math.abs(iy)),
+        poly: [
+          [lng - lngStep/2*g, lat - latStep/2*g], [lng + lngStep/2*g, lat - latStep/2*g],
+          [lng + lngStep/2*g, lat + latStep/2*g], [lng - lngStep/2*g, lat + latStep/2*g],
+        ],
+      });
+    }
+  }
+  const w = getWeights();
+  board.forEach(b => b.score = totalScore(b.comp, w));
+  mode = board.some(b => b.real) ? 'fixture' : 'synthetic';
+
+  document.getElementById('disclaimer').innerHTML = mode === 'fixture'
+    ? '<b>REAL DATA</b> · Oakland feature-store fixture · ' + board.length + ' squares'
+    : '<b>PROTOTYPE</b> · synthetic scores — model integration pending';
+
+  document.getElementById('cellCount').textContent = board.length;
+  const sc = document.getElementById('scanning'); sc.style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('why').style.display = 'none';
+  clearStreetMarkers(); clearSfMarkers();
+  selectedStreet = null; revealWave = -1; rankedStreets = []; render();
+
+  setTimeout(() => {
+    sc.style.display = 'none';
+    document.getElementById('weights').style.display = 'block';
+    rippleReveal();
+    rankStreets(concept, radM);
+  }, 850);
+}
+
+function rippleReveal() {
+  const maxWave = Math.max(0, ...board.map(c => c.wave));
+  let wcur = -1;
+  const step = () => {
+    wcur++; revealWave = wcur; render();
+    if (wcur <= maxWave) setTimeout(step, 65);
+  };
+  step();
+}
+
+function rankStreets(concept, radM) {
+  rankedStreets = STREETS.map(st => {
+    const mid = st.path[Math.floor(st.path.length / 2)];
+    const distKm = km(center, [mid[1], mid[0]]);
+    // sample along the street
+    const samples = st.path.map(([lng, lat]) => sampleAt(lat, lng, concept));
+    const comp = ['D','C','T','S','uniProx'].reduce((o, k) => {
+      o[k] = samples.reduce((s, x) => s + (x.comp[k] || 0), 0) / samples.length; return o;
+    }, {});
+    comp.lat = mid[1]; comp.lng = mid[0];
+    const score = totalScore(comp, getWeights());
+    const real = samples.some(x => x.real);
+    return { ...st, mid, distKm, score, comp, real };
+  })
+  .filter(st => st.distKm * 1000 <= radM + 700)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 5);
+  rankedStreets.forEach((st, i) => st.rank = i + 1);
+  renderStreetList(concept);
+  setTimeout(() => { if (uiMode === 1) dropStreetMarkers(); }, 450);
+  render();
+}
+
+function grade(s) { return s > .82 ? 'A+' : s > .74 ? 'A' : s > .66 ? 'A−' : s > .58 ? 'B+' : s > .5 ? 'B' : 'B−'; }
+const NICKS = [
+  [c => c.uniProx > .5 && c.T > .55, 'student corridor · daytime crush'],
+  [c => c.S > .65, 'high-spend stroll street'],
+  [c => c.T > .7, 'peak foot-traffic strip'],
+  [c => c.C > .7, 'demand with no direct rival'],
+  [() => true, 'balanced opportunity pocket'],
+];
+const nickname = c => NICKS.find(([f]) => f(c))[1];
+
+function renderStreetList(concept) {
+  document.getElementById('resultsSub').textContent =
+    `for “${concept}” · ${board.length} squares · ${mode === 'fixture' ? 'real feature store' : 'synthetic demo'}`;
+  const list = document.getElementById('streetList');
+  list.innerHTML = '';
+  rankedStreets.forEach((st, i) => {
+    const el = document.createElement('div');
+    el.className = 'street-card';
+    el.innerHTML = `
+      <div class="rank">${st.rank}</div>
+      <div><div class="nm">${st.name}</div><div class="nick">${st.hood} · ${nickname(st.comp)}</div></div>
+      <div><div class="grade">${grade(st.score)}</div><div class="score">${(st.score*100).toFixed(0)}/100</div></div>`;
+    el.onmouseenter = () => { if (selectedStreet === null) { hoveredStreet = i; render(); } };
+    el.onmouseleave = () => { if (selectedStreet === null) { hoveredStreet = null; render(); } };
+    el.onclick = () => openWhy(i);
+    list.appendChild(el);
+    setTimeout(() => el.classList.add('in'), 140 + i * 110);
+  });
+  if (uiMode === 1) document.getElementById('results').style.display = 'flex';
+}
+
+function clearStreetMarkers() { streetMarkers.forEach(m => m.remove()); streetMarkers = []; }
+function dropStreetMarkers() {
+  clearStreetMarkers();
+  rankedStreets.forEach((st, i) => {
+    const el = document.createElement('div');
+    el.className = 'rank-marker' + (st.rank === 1 ? ' first' : '');
+    el.style.animationDelay = `${i * .12}s`;
+    el.textContent = st.rank;
+    el.onclick = (e) => { e.stopPropagation(); openWhy(i); };
+    streetMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(st.mid).addTo(map));
+  });
+}
+
+/* ============ street detail (why + storefronts) ============ */
+const SF_WHYS = [
+  'corner lot — maximum visibility',
+  'mid-block, beside a busy anchor',
+  'former retail unit, restaurant-ready',
+];
+function storefrontsFor(st) {
+  const psf = 14 + st.score * 26; // $/sqft/yr placeholder until parcel join
+  return [0, 1, 2].map(i => {
+    const h = hash01(st.name + i);
+    const num = Math.round((st.range[0] + h * (st.range[1] - st.range[0])) / 2) * 2;
+    const sqft = 850 + Math.round(h * 1400 / 50) * 50;
+    const t = (i + 1) / st.path.length;
+    const a = st.path[Math.min(i, st.path.length - 1)], b = st.path[Math.min(i + 1, st.path.length - 1)];
+    return {
+      tag: 'ABC'[i],
+      addr: `${num} ${st.name}`,
+      sqft,
+      rentMo: Math.round(sqft * psf / 12 / 50) * 50,
+      why: SF_WHYS[i],
+      lngLat: [a[0] + (b[0] - a[0]) * .5, a[1] + (b[1] - a[1]) * .5],
+    };
+  });
+}
+function clearSfMarkers() { sfMarkers.forEach(m => m.remove()); sfMarkers = []; }
+
+function openWhy(i) {
+  selectedStreet = i; hoveredStreet = null;
+  const st = rankedStreets[i], c = st.comp;
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('why').style.display = 'flex';
+  document.getElementById('whyGrade').textContent = grade(st.score);
+  document.getElementById('whyName').textContent = `#${st.rank} · ${st.name}`;
+  document.getElementById('whyNick').textContent =
+    `${st.hood} · ${nickname(c)}` + (st.real && FIXTURE ? ` · model confidence ${Math.round((FIXTURE.zones?.[0]?.confidence ?? .6) * 100)}%` : '');
+
+  const seed = hash01(st.name);
+  const competitors = Math.max(0, Math.round((1 - c.C) * 6 + seed * 1.5 - .5));
+  const foot = Math.round(45 + c.T * 52);
+  const students = Math.round(c.uniProx * 42 + seed * 5);
+  const spend = Math.round(2300 + c.S * 1900 + seed * 200);
+  const M = [
+    ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100,
+      competitors <= 1 ? 'whitespace for this concept' : 'crowded field'],
+    ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted'],
+    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment'],
+    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity'],
+    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity'],
+  ];
+  const wrap = document.getElementById('whyMetrics');
+  wrap.innerHTML = '';
+  M.forEach(([label, val, pct, sub], j) => {
+    const m = document.createElement('div');
+    m.className = 'metric';
+    m.innerHTML = `
+      <div class="row"><span class="lb">${label} <span>· ${sub}</span></span><span class="v">${val}</span></div>
+      <div class="track"><div class="fill"></div></div>`;
+    wrap.appendChild(m);
+    setTimeout(() => {
+      m.classList.add('in');
+      m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
+    }, 180 + j * 120);
+  });
+
+  // storefront candidates
+  const sfs = storefrontsFor(st);
+  const sfWrap = document.getElementById('storefronts');
+  sfWrap.innerHTML = '<h4>CANDIDATE STOREFRONTS</h4>';
+  clearSfMarkers();
+  sfs.forEach((sf, j) => {
+    const el = document.createElement('div');
+    el.className = 'sf';
+    el.innerHTML = `
+      <div class="tag">${sf.tag}</div>
+      <div><div class="ad">${sf.addr}</div><div class="wh">${sf.why}</div></div>
+      <div><div class="rent">$${sf.rentMo.toLocaleString()}/mo</div><div class="sq">${sf.sqft.toLocaleString()} sqft · est.</div></div>`;
+    sfWrap.appendChild(el);
+    setTimeout(() => el.classList.add('in'), 650 + j * 130);
+    const mk = document.createElement('div');
+    mk.className = 'sf-marker'; mk.textContent = sf.tag;
+    mk.style.animationDelay = `${.6 + j * .13}s`;
+    sfMarkers.push(new maplibregl.Marker({ element: mk, anchor: 'center' }).setLngLat(sf.lngLat).addTo(map));
+  });
+
+  map.flyTo({ center: st.mid, zoom: 15.4, duration: 1300 });
+  render();
+}
+function closeWhy() {
+  selectedStreet = null; clearSfMarkers();
+  document.getElementById('why').style.display = 'none';
+  document.getElementById('results').style.display = 'flex';
+  map.flyTo({ center: [center[1], center[0]], zoom: 13.2, duration: 1100 });
+  render();
+}
+
+/* ============ weights ============ */
+function reWeight() {
+  ['D','C','T','S'].forEach(k => document.getElementById('w'+k+'v').textContent = document.getElementById('w'+k).value);
+  if (!board.length) return;
+  weightsTouched = true;
+  const w = getWeights();
+  board.forEach(c => c.score = totalScore(c.comp, w));
+  if (selectedStreet !== null) closeWhy();
+  rankStreets(conceptInput.value.trim(), +document.getElementById('radius').value);
+}
+
+/* ============ mode 2: reverse ============ */
+const CONCEPTS = [
+  { name: 'Dessert / frozen yogurt', em: '🍦', w: { D: .4,  T: .25, S: .15, C: .2  } },
+  { name: 'Korean fried chicken',    em: '🍗', w: { T: .35, D: .25, C: .25, S: .15 } },
+  { name: 'Specialty coffee',        em: '☕', w: { D: .35, T: .3,  S: .2,  C: .15 } },
+  { name: 'Fast-casual bowls',       em: '🥗', w: { T: .3,  D: .3,  S: .25, C: .15 } },
+  { name: 'Ramen bar',               em: '🍜', w: { D: .45, T: .2,  C: .25, S: .1  } },
+  { name: 'Brunch cafe',             em: '🥞', w: { S: .4,  D: .25, T: .2,  C: .15 } },
+  { name: 'Wine bar',                em: '🍷', w: { S: .45, T: .25, C: .2,  D: .1  } },
+  { name: 'Bubble tea',              em: '🧋', w: { D: .5,  T: .25, C: .15, S: .1  } },
+];
+const REASONS = {
+  D: 'strong local demand pool', T: 'heavy foot traffic', C: 'few direct rivals',
+  S: 'high dining spend nearby', uni: 'students next door',
+};
+function reverseAt(lat, lng) {
+  if (revMarker) revMarker.remove();
+  const el = document.createElement('div');
+  el.innerHTML = '<svg class="center-pin-el" viewBox="0 0 24 32" fill="none"><path d="M12 1C6 1 1.5 5.6 1.5 11.6 1.5 19 12 30.5 12 30.5S22.5 19 22.5 11.6C22.5 5.6 18 1 12 1Z" fill="#C4622D"/><circle cx="12" cy="11.5" r="4" fill="#FFFDF7"/></svg>';
+  revMarker = new maplibregl.Marker({ element: el.firstChild, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(map);
+
+  const s = sampleAt(lat, lng, 'reverse');
+  const c = s.comp;
+  // nearest street for a human-readable label
+  let nearest = STREETS[0], bd = 1e9;
+  for (const st of STREETS) {
+    const mid = st.path[Math.floor(st.path.length / 2)];
+    const d = km([lat, lng], [mid[1], mid[0]]);
+    if (d < bd) { bd = d; nearest = st; }
+  }
+  const fits = CONCEPTS.map(cc => {
+    const base = c.D * cc.w.D + c.C * cc.w.C + c.T * cc.w.T + c.S * cc.w.S;
+    const noise = (hash01(cc.name + lat.toFixed(4) + lng.toFixed(4)) - .5) * .08;
+    const fit = Math.min(.98, Math.max(.05, base + c.uniProx * .06 + noise));
+    const contrib = Object.entries(cc.w).map(([k, w]) => [k, w * c[k]]).sort((a, b) => b[1] - a[1]);
+    const rs = [REASONS[contrib[0][0]], c.uniProx > .5 ? REASONS.uni : REASONS[contrib[1][0]]];
+    return { ...cc, fit, rs: [...new Set(rs)] };
+  }).sort((a, b) => b.fit - a.fit).slice(0, 6);
+
+  document.getElementById('revHint').style.display = 'none';
+  const res = document.getElementById('revResult');
+  res.style.display = 'block';
+  document.getElementById('revAddr').textContent =
+    bd < 0.5 ? `Near ${nearest.name}, ${nearest.hood}` : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  document.getElementById('revSub').textContent =
+    (s.real ? 'real feature store · ' : 'synthetic demo · ') + `block scored on demand, rivals, traffic, spend`;
+  const list = document.getElementById('fitList');
+  list.innerHTML = '';
+  fits.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'fit-row';
+    row.innerHTML = `
+      <div class="em">${f.em}</div>
+      <div><div class="nm">${f.name}</div><div class="rs">${f.rs.join(' · ')}</div></div>
+      <div class="pct" id="fitPct${i}">0%</div>
+      <div class="fit-track"><div class="fit-fill" id="fitFill${i}"></div></div>`;
+    list.appendChild(row);
+    setTimeout(() => {
+      row.classList.add('in');
+      countUp(document.getElementById('fitPct' + i), Math.round(f.fit * 100), '%');
+      document.getElementById('fitFill' + i).style.width = (f.fit * 100) + '%';
+    }, 120 + i * 110);
+  });
+  map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14.6), duration: 900 });
+}
+
+/* ============ deck render ============ */
+function render() {
+  if (!overlay) return;
+  const layers = [];
+
+  // the board (mode 1, after analyze): go-board squares, quiet squares cut out entirely
+  if (uiMode === 1 && board.length) {
+    const scores = board.map(c => c.score).sort((a, b) => a - b);
+    const cut = scores[Math.floor(scores.length * 0.25)] ?? 0;
+    const dimAll = selectedStreet !== null;
+    layers.push(new deck.PolygonLayer({
+      id: 'board',
+      data: board.filter(c => c.score >= cut),
+      getPolygon: d => d.poly,
+      pickable: true,
+      stroked: false,
+      getFillColor: d => {
+        const [r, g, b] = rampColor((d.score - cut) / Math.max(.05, 1 - cut));
+        let a = d.wave <= revealWave ? 190 : 0;
+        if (dimAll) a = 85;
+        return [r, g, b, a];
+      },
+      updateTriggers: { getFillColor: [revealWave, selectedStreet] },
+      transitions: { getFillColor: 220 },
+    }));
+  }
+
+  // street highlights
+  if (uiMode === 1 && rankedStreets.length) {
+    const sel = selectedStreet, hov = hoveredStreet;
+    // soft glow under selected/hovered
+    const glowTarget = sel !== null ? sel : hov;
+    if (glowTarget !== null) {
+      layers.push(new deck.PathLayer({
+        id: 'street-glow',
+        data: [rankedStreets[glowTarget]],
+        getPath: d => d.path,
+        getColor: sel !== null ? [27, 100, 218, 60] : [246, 227, 214, 210],
+        getWidth: 26, widthUnits: 'pixels',
+        capRounded: true, jointRounded: true,
+      }));
+    }
+    layers.push(new deck.PathLayer({
+      id: 'street-casing',
+      data: rankedStreets,
+      getPath: d => d.path,
+      getColor: [253, 251, 246, 235],
+      getWidth: d => 6 + d.score * 8 + 3,
+      widthUnits: 'pixels', capRounded: true, jointRounded: true,
+    }));
+    layers.push(new deck.PathLayer({
+      id: 'streets',
+      data: rankedStreets,
+      getPath: d => d.path,
+      pickable: true,
+      getColor: d => {
+        const idx = rankedStreets.indexOf(d);
+        if (sel !== null) return idx === sel ? [27, 100, 218, 250] : [31, 27, 22, 60];
+        return d.rank === 1 ? [196, 86, 46, 245] : [31, 27, 22, 235];
+      },
+      getWidth: d => 6 + d.score * 8,
+      widthUnits: 'pixels', capRounded: true, jointRounded: true,
+      onClick: ({ object }) => { const idx = rankedStreets.indexOf(object); if (idx >= 0) openWhy(idx); },
+      updateTriggers: { getColor: [selectedStreet] },
+    }));
+  }
+
+  // radius circle (mode 1, pre-selection)
+  if (uiMode === 1 && center && selectedStreet === null) {
+    layers.push(new deck.ScatterplotLayer({
+      id: 'radius', data: [{}],
+      getPosition: () => [center[1], center[0]],
+      getRadius: +document.getElementById('radius').value,
+      radiusUnits: 'meters', stroked: true, filled: true,
+      getFillColor: [196, 98, 45, 8], getLineColor: [28, 25, 19, 70], lineWidthMinPixels: 1.4,
+    }));
+  }
+
+  overlay.setProps({
+    layers,
+    getTooltip: ({ object, layer }) => {
+      if (!object) return null;
+      if (layer.id === 'board') return { text: `square score ${(object.score * 100).toFixed(0)}` };
+      if (layer.id === 'streets') return { text: `${object.name} · ${grade(object.score)} (${(object.score * 100).toFixed(0)})` };
+      return null;
+    },
+  });
+}
+</script>
+</body>
+</html>
