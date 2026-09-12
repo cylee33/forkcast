@@ -1,0 +1,18 @@
+# Annual food-away-from-home spend per household by income bracket (USD/consumer unit/yr).
+# Modeled on BLS CEX 2023 Table 1203 ("Income before taxes"), but these figures are
+# APPROXIMATE, not the verified published values: BLS blocks scripted downloads of the
+# table (403 on the xlsx with and without a browser user agent), and the 2023 news
+# release only publishes year-over-year % changes by quintile, not absolute
+# food-away-from-home dollars. Do not display these as real dollar figures.
+#
+# They are safe to use here because they only ever enter scoring as relative weights:
+# capacity = hh_count * sum(share * bracket_value) is percentile-ranked across every
+# cell (see common.pct), so a uniform rescaling of all six values cancels out and only
+# the curve's shape -- monotonic, roughly 5.2x from lowest to highest bracket, matching
+# published CEX behavior -- affects the ranking.
+income_lt25k: 1500
+income_25_50k: 2300
+income_50_75k: 3100
+income_75_100k: 3900
+income_100_150k: 5000
+income_150k_plus: 7800
