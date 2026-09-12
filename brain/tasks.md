@@ -3,6 +3,18 @@
 Checkbox state is the source of truth for what is built. Task numbers match
 `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`.
 
+## Optional Yelp popularity integration [ML]
+
+- [x] Branch from updated `origin/main` at `f72f19c`
+- [x] Add contract-neutral `score_profile(profile, h3_ids)` adapter
+- [x] Broadcast matched ACS 2021 tract inputs to all 18,275 Pittsburgh H3 centers
+- [x] Keep Yelp-trained model, derived lookup, and evaluation metadata local/ignored
+- [x] Verify metro-fixed percentiles, coverage flags, portable model predictions, tests, and lint
+- [x] Add a contract-compatible helper that enriches GeoJSON cell properties when local artifacts exist
+- [x] Add a standalone FastAPI route for local end-to-end model testing
+- [ ] Call the helper from `/api/analysis` after the backend endpoint lands
+- [ ] Resolve Yelp review/approval requirements before any public model/results release
+
 ## Phase 0: Planning — complete
 
 - [x] Brainstorm the product and confirm scope decisions

@@ -3,6 +3,46 @@
 Each developer appends to their own section only, so the file does not
 conflict on merge.
 
+## Codex ML integration
+
+### 2026-09-12 — local branch from updated main
+
+Created `codex/yelp-model-integration` at `f72f19c` in a separate worktree, preserving
+the original experiment checkout. Added `ml.popularity.score_profile` as an optional,
+contract-neutral backend integration point. The portable model uses the exact ACS 2021
+tract definitions from training and broadcasts them to all 18,275 Pittsburgh H3 centers.
+It returns a Pittsburgh-wide fixed percentile plus missing/out-of-training-range flags;
+it does not alter `D/C/T/A/S_spend/K/Sup` or `total`.
+
+The trained model, H3 demographic lookup, and evaluation metadata remain ignored local
+artifacts under `ml/artifacts/` because the Yelp Dataset Terms restrict third-party and
+public release. Source code, a reproducible local asset builder, and artifact-aware tests
+are ready to commit locally. With local artifacts present, 70 tests pass and 2 DB tests
+skip; ruff is clean. A clean public checkout skips only four local-artifact integration
+tests. Cold full-county scoring measured about 1.34 seconds; a warm 500-cell request about
+0.01 seconds on this host.
+
+**Pick up here next:** once the backend scoring endpoint exists, call `score_profile`
+with its candidate H3 IDs and expose the result only as a separately labeled historical
+popularity signal. Do not push model/results publicly without resolving Yelp review terms.
+
+### 2026-09-12 — response enrichment hook
+
+Re-fetched `origin/main`; it remains at `f72f19c`, so the integration branch already
+has the latest foundation. Added `enrich_cell_collection`, which copies a
+`RecommendResponse.cells` FeatureCollection and adds four explicitly historical
+popularity properties per H3 without changing any existing property, subscore, or total.
+It degrades to an unchanged copy when private artifacts are absent. The real 217-cell
+fixture was enriched end to end; the full suite now reports 72 passed and 2 DB skips,
+and ruff is clean. The backend still has no `/api/analysis` implementation, so its final
+connection is one documented call when that endpoint lands.
+
+Added a small FastAPI application and `/api/popularity` development route so the model
+can be tested over HTTP before the scoring backend arrives. A live localhost smoke test
+returned 200 for health and for a real Korean-concept H3 prediction. The route returns
+503 when private artifacts are not mounted and labels every result as an unvalidated
+Pittsburgh experiment.
+
 ## Dev 1 (cylee)
 
 ### 2026-09-12 — Session 1
