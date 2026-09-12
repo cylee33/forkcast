@@ -1,0 +1,241 @@
+# Reverse-mode archetypes: each entry is a partial ConceptProfile (api/services/reverse.py
+# fills confidence=0.7 and lets api/models.ConceptProfile defaults complete the rest).
+# Weights follow the service-format defaults in forkcast-proposal.md §5.5.
+archetypes:
+  - concept_name: Quick-service burger counter
+    cuisines: [american]
+    service_format: quick_service
+    price_tier: 1
+    avg_ticket_usd: 11
+    dayparts: {lunch: 0.4, dinner: 0.5, late_night: 0.1}
+    customer_archetypes: [students, young_adults, office_workers]
+    income_fit: low_to_medium
+    catchment: walk
+    catchment_tau_min: 6
+    footprint_sqft: [700, 1400]
+    seats: 20
+    supplier_types: [wholesale, butcher]
+    direct_competitor_description: quick-service burger and fries counters
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.22, A: 0.15, S_spend: 0.08, K: 0.09, Sup: 0.03}
+
+  - concept_name: Fast-casual taqueria
+    cuisines: [mexican]
+    service_format: fast_casual
+    price_tier: 1
+    avg_ticket_usd: 13
+    dayparts: {lunch: 0.4, dinner: 0.4, late_night: 0.2}
+    customer_archetypes: [students, young_adults, office_workers]
+    income_fit: low_to_medium
+    catchment: walk
+    catchment_tau_min: 8
+    footprint_sqft: [900, 1800]
+    seats: 30
+    supplier_types: [wholesale, supermarket]
+    direct_competitor_description: fast-casual taquerias and burrito counters
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.22, A: 0.15, S_spend: 0.08, K: 0.09, Sup: 0.03}
+
+  - concept_name: Korean fast-casual bowl shop
+    cuisines: [korean]
+    service_format: fast_casual
+    price_tier: 2
+    avg_ticket_usd: 15
+    dayparts: {lunch: 0.4, dinner: 0.4, late_night: 0.2}
+    customer_archetypes: [students, young_adults]
+    income_fit: low_to_medium
+    catchment: walk
+    catchment_tau_min: 8
+    footprint_sqft: [800, 1600]
+    seats: 26
+    supplier_types: [asian_grocer, wholesale]
+    direct_competitor_description: fast-casual Korean bowls, bibimbap, Korean fried chicken
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.22, A: 0.15, S_spend: 0.08, K: 0.09, Sup: 0.03}
+
+  - concept_name: Quick-service pizza slice shop
+    cuisines: [pizza]
+    service_format: quick_service
+    price_tier: 1
+    avg_ticket_usd: 10
+    dayparts: {lunch: 0.3, dinner: 0.5, late_night: 0.2}
+    customer_archetypes: [students, young_adults, families]
+    income_fit: low_to_medium
+    catchment: walk
+    catchment_tau_min: 6
+    footprint_sqft: [600, 1200]
+    seats: 16
+    supplier_types: [italian_grocer, wholesale]
+    direct_competitor_description: quick-service pizza-by-the-slice shops
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.22, A: 0.15, S_spend: 0.08, K: 0.09, Sup: 0.03}
+
+  - concept_name: Bubble tea and dessert counter
+    cuisines: [bubble_tea]
+    service_format: quick_service
+    price_tier: 1
+    avg_ticket_usd: 7
+    dayparts: {afternoon: 0.5, lunch: 0.2, dinner: 0.3}
+    customer_archetypes: [students, young_adults]
+    income_fit: low_to_medium
+    catchment: walk
+    catchment_tau_min: 5
+    footprint_sqft: [400, 900]
+    seats: 12
+    supplier_types: [asian_grocer, wholesale]
+    direct_competitor_description: bubble tea and dessert counters
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.22, A: 0.15, S_spend: 0.08, K: 0.09, Sup: 0.03}
+
+  - concept_name: Casual-dining American grill
+    cuisines: [american]
+    service_format: casual_dining
+    price_tier: 2
+    avg_ticket_usd: 22
+    dayparts: {lunch: 0.4, dinner: 0.6}
+    customer_archetypes: [families, office_workers]
+    income_fit: medium
+    catchment: drive
+    catchment_tau_min: 15
+    footprint_sqft: [2500, 4500]
+    seats: 90
+    supplier_types: [wholesale]
+    direct_competitor_description: casual-dining American grills and diners
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.12, A: 0.12, S_spend: 0.15, K: 0.12, Sup: 0.06}
+
+  - concept_name: Family-style Italian trattoria
+    cuisines: [italian]
+    service_format: casual_dining
+    price_tier: 2
+    avg_ticket_usd: 24
+    dayparts: {dinner: 0.7, weekend: 0.3}
+    customer_archetypes: [families]
+    income_fit: medium
+    catchment: drive
+    catchment_tau_min: 15
+    footprint_sqft: [2500, 4500]
+    seats: 80
+    supplier_types: [italian_grocer, wholesale]
+    direct_competitor_description: family-style Italian trattorias and pasta houses
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.18, T: 0.12, A: 0.12, S_spend: 0.15, K: 0.12, Sup: 0.06}
+
+  - concept_name: Neighborhood specialty coffeehouse
+    cuisines: [cafe]
+    service_format: cafe
+    price_tier: 1
+    avg_ticket_usd: 8
+    dayparts: {breakfast: 0.5, lunch: 0.3, afternoon: 0.2}
+    customer_archetypes: [students, young_adults, office_workers]
+    income_fit: medium
+    catchment: walk
+    catchment_tau_min: 7
+    footprint_sqft: [600, 1400]
+    seats: 24
+    supplier_types: [wholesale]
+    direct_competitor_description: specialty coffeehouses and espresso bars
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.15, T: 0.25, A: 0.17, S_spend: 0.08, K: 0.07, Sup: 0.03}
+
+  - concept_name: Weekend brunch cafe
+    cuisines: [breakfast_brunch]
+    service_format: cafe
+    price_tier: 2
+    avg_ticket_usd: 18
+    dayparts: {breakfast: 0.6, lunch: 0.4}
+    customer_archetypes: [young_adults, families]
+    income_fit: medium
+    catchment: walk
+    catchment_tau_min: 8
+    footprint_sqft: [1200, 2200]
+    seats: 45
+    supplier_types: [wholesale]
+    direct_competitor_description: weekend brunch cafes serving pancakes and egg plates
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.15, T: 0.25, A: 0.17, S_spend: 0.08, K: 0.07, Sup: 0.03}
+
+  - concept_name: Craft cocktail bar
+    cuisines: [bar]
+    service_format: bar
+    price_tier: 3
+    avg_ticket_usd: 28
+    dayparts: {dinner: 0.3, late_night: 0.5, weekend: 0.2}
+    customer_archetypes: [young_adults, nightlife]
+    income_fit: medium_to_high
+    catchment: walk
+    catchment_tau_min: 10
+    footprint_sqft: [1200, 2400]
+    seats: 50
+    supplier_types: [wholesale]
+    direct_competitor_description: craft cocktail bars and speakeasy-style lounges
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.15, T: 0.25, A: 0.17, S_spend: 0.08, K: 0.07, Sup: 0.03}
+
+  - concept_name: Natural wine bar with small plates
+    cuisines: [wine_bar]
+    service_format: bar
+    price_tier: 3
+    avg_ticket_usd: 32
+    dayparts: {dinner: 0.7, late_night: 0.3}
+    customer_archetypes: [young_adults, tourists]
+    income_fit: medium_to_high
+    catchment: walk
+    catchment_tau_min: 10
+    footprint_sqft: [1000, 2000]
+    seats: 40
+    supplier_types: [wholesale]
+    direct_competitor_description: natural wine bars serving small plates
+    is_franchise: false
+    proposed_weights: {D: 0.25, C: 0.15, T: 0.25, A: 0.17, S_spend: 0.08, K: 0.07, Sup: 0.03}
+
+  - concept_name: Upscale French bistro
+    cuisines: [french]
+    service_format: fine_dining
+    price_tier: 4
+    avg_ticket_usd: 68
+    dayparts: {dinner: 0.7, weekend: 0.3}
+    customer_archetypes: [tourists, office_workers]
+    income_fit: high
+    catchment: drive
+    catchment_tau_min: 20
+    footprint_sqft: [2500, 4000]
+    seats: 70
+    supplier_types: [wholesale]
+    direct_competitor_description: upscale French bistros and brasseries
+    is_franchise: false
+    proposed_weights: {D: 0.18, C: 0.15, T: 0.08, A: 0.10, S_spend: 0.25, K: 0.15, Sup: 0.09}
+
+  - concept_name: Modern steakhouse
+    cuisines: [steakhouse]
+    service_format: fine_dining
+    price_tier: 4
+    avg_ticket_usd: 75
+    dayparts: {dinner: 0.8, weekend: 0.2}
+    customer_archetypes: [families, tourists, office_workers]
+    income_fit: high
+    catchment: drive
+    catchment_tau_min: 20
+    footprint_sqft: [3000, 5000]
+    seats: 100
+    supplier_types: [butcher, wholesale]
+    direct_competitor_description: modern steakhouses with a raw bar
+    is_franchise: false
+    proposed_weights: {D: 0.18, C: 0.15, T: 0.08, A: 0.10, S_spend: 0.25, K: 0.15, Sup: 0.09}
+
+  - concept_name: Delivery-only ghost kitchen (Asian fusion)
+    cuisines: [chinese, korean]
+    service_format: ghost_kitchen
+    price_tier: 2
+    avg_ticket_usd: 18
+    dayparts: {lunch: 0.4, dinner: 0.5, late_night: 0.1}
+    customer_archetypes: [young_adults, office_workers]
+    income_fit: medium
+    catchment: drive
+    catchment_tau_min: 15
+    footprint_sqft: [400, 900]
+    seats: 0
+    supplier_types: [asian_grocer, wholesale]
+    direct_competitor_description: delivery-only Asian fusion kitchens
+    is_franchise: false
+    proposed_weights: {D: 0.40, C: 0.15, T: 0.05, A: 0.00, S_spend: 0.05, K: 0.25, Sup: 0.10}
