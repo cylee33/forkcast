@@ -1,5 +1,6 @@
 """Gemini gemini-embedding-001 embeddings for every place → pgvector."""
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -67,9 +68,12 @@ def main():
             r = json.loads(line)
             done[r["id"]] = r["v"]
     todo = places[~places.id.isin(done)]
-    client = genai.Client()
-    config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=DIMS)
-    done.update(fetch_embeddings(todo, client, config, cache))
+    if len(todo) and os.environ.get("GEMINI_API_KEY"):
+        client = genai.Client()
+        config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=DIMS)
+        done.update(fetch_embeddings(todo, client, config, cache))
+    elif len(todo):
+        print(f"embeddings: GEMINI_API_KEY not set, skipping {len(todo)} unembedded place(s); emitting cache only")
     have = places[places.id.isin(done)]
     out = pd.DataFrame({"id": have.id, "embedding": [done[i] for i in have.id]})
     common.save(out, "place_embeddings")

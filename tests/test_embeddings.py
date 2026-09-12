@@ -71,6 +71,30 @@ def test_fetch_embeddings_keeps_batches_fetched_before_a_later_batch_fails(tmp_p
     ]
 
 
+def test_main_survives_absent_gemini_key_without_calling_client(monkeypatch, tmp_path):
+    """With no GEMINI_API_KEY, main() must not construct genai.Client() at all -- constructing it
+    unconditionally is what raised ValueError('No API key was provided') and aborted the whole
+    `make ingest` chain before steps 09-12 ever ran. Exercise this with the key unset; no live call
+    should ever happen here."""
+    e = load_script("08_place_embeddings")
+    monkeypatch.setattr(e.common, "RAW", tmp_path / "raw")
+    monkeypatch.setattr(e.common, "PROC", tmp_path / "processed")
+    (tmp_path / "processed").mkdir(parents=True)
+    places = pd.DataFrame({"id": ["p1", "p2"], "name": ["A", "B"],
+                            "categories": [np.array(["x"]), np.array(["y"])], "summary": ["", ""]})
+    places.to_parquet(tmp_path / "processed" / "places.parquet", index=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr("sys.argv", ["08_place_embeddings.py", "--no-db"])
+
+    def _boom(*a, **k):
+        raise AssertionError("genai.Client() must not be constructed when no key is set")
+    monkeypatch.setattr(e.genai, "Client", _boom)
+
+    e.main()  # must not raise
+    out = pd.read_parquet(tmp_path / "processed" / "place_embeddings.parquet")
+    assert len(out) == 0  # nothing embedded, but the parquet is still emitted from cache
+
+
 def test_fetch_embeddings_returns_all_ids_when_nothing_fails(tmp_path):
     e = load_script("08_place_embeddings")
     todo = pd.DataFrame({"id": ["a", "b"], "name": ["A", "B"],
