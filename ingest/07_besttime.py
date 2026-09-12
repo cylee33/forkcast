@@ -15,6 +15,7 @@ HOURS = {"morning": range(6, 11), "lunch": range(11, 14), "afternoon": range(14,
          "dinner": range(17, 21), "late_night": list(range(21, 24)) + list(range(0, 3))}
 DAYPARTS = list(HOURS) + ["weekend"]
 PA_COLS = ["place_id", "daypart", "busyness"]
+PA_DTYPES = {"place_id": "object", "daypart": "object", "busyness": "float64"}
 
 
 def fetch_venue(place_id: str, name: str, address: str | None, lat: float, lng: float) -> list[list[int]] | None:
@@ -39,6 +40,14 @@ def dayparts_from_hours(week: list[list[int]]) -> dict[str, float]:
     out = {k: float(arr[:, list(hrs)].max(axis=1).mean()) for k, hrs in HOURS.items()}
     out["weekend"] = float(arr[5:7].mean())
     return out
+
+
+def place_activity_frame(rows: list[dict]) -> pd.DataFrame:
+    """Build the place_activity frame with a fixed dtype (busyness: float64) whether there are
+    rows or not, so the parquet's schema doesn't change shape depending on whether a run had
+    real venues (an empty `pd.DataFrame(columns=...)` would otherwise leave every column
+    object-typed)."""
+    return pd.DataFrame(rows, columns=PA_COLS).astype(PA_DTYPES)
 
 
 def proxy_activity(cells: pd.DataFrame, osm: pd.DataFrame, lodes: pd.DataFrame) -> pd.DataFrame:
@@ -91,7 +100,7 @@ def main():
     api_key = os.environ.get("BESTTIME_API_KEY_PRIVATE")
     if not api_key:
         print("besttime: BESTTIME_API_KEY_PRIVATE not set, writing proxy only")
-        pa = pd.DataFrame(columns=PA_COLS)
+        pa = place_activity_frame([])
     else:
         top = places[places.is_open & places.reviews.notna()].sort_values("reviews", ascending=False)
         if args.limit is not None:
@@ -103,12 +112,12 @@ def main():
             week = fetch_venue(p.id, p.name, p.get("address"), p.lat, p.lng)
             if week and len(week) == 7:
                 rows += [{"place_id": p.id, "daypart": d, "busyness": v} for d, v in dayparts_from_hours(week).items()]
-        pa = pd.DataFrame(rows, columns=PA_COLS)
+        pa = place_activity_frame(rows)
 
     common.save(pa, "place_activity")
     common.save(cells_from_activity(pa, places, cells, proxy), "activity_cells")
     if not args.no_db and len(pa):
-        common.write_table(pa, "place_activity", if_exists="append")
+        common.write_table(pa, "place_activity")
     print(f"besttime: {pa.place_id.nunique()} venues with real data")
 
 
