@@ -17,6 +17,8 @@ FIELDS = ("places.id,places.displayName,places.location,places.rating,places.use
 TYPES = ["restaurant", "cafe", "bar", "bakery", "meal_takeaway"]
 PRICE = {"PRICE_LEVEL_INEXPENSIVE": 1, "PRICE_LEVEL_MODERATE": 2, "PRICE_LEVEL_EXPENSIVE": 3,
          "PRICE_LEVEL_VERY_EXPENSIVE": 4}
+GOOGLE_COLS = ["google_id", "name", "lat", "lng", "rating", "reviews", "price_level", "google_open",
+               "types", "summary", "cuisine_key"]
 
 
 def search_cells() -> list[str]:
@@ -62,7 +64,8 @@ def parse_place(p: dict) -> dict:
     types = p.get("types", [])
     return {"google_id": p["id"], "name": name, "lat": p["location"]["latitude"], "lng": p["location"]["longitude"],
             "rating": p.get("rating"), "reviews": p.get("userRatingCount"),
-            "price_level": PRICE.get(p.get("priceLevel")), "google_open": p.get("businessStatus") == "OPERATIONAL",
+            "price_level": PRICE.get(p.get("priceLevel")),
+            "google_open": p.get("businessStatus") != "CLOSED_PERMANENTLY",
             "types": types, "summary": (p.get("editorialSummary") or {}).get("text"),
             "cuisine_key": taxonomy.cuisine_for(name, types)}
 
@@ -77,9 +80,12 @@ def match(wprdc: pd.DataFrame, google: pd.DataFrame) -> pd.DataFrame:
     w = wprdc.copy()
     w["_k"] = w.name.map(_norm)
     m = w.merge(g, on="_k", how="left", suffixes=("", "_g"))
-    d = np.hypot((m.lat - m.lat_g) * 111.0, (m.lng - m.lng_g) * 85.0)  # km
+    # coerce: an empty (all-object-dtype) google frame — the WPRDC-only fallback — leaves lat_g/lng_g
+    # as object NaN after the merge, and np.hypot chokes on object dtype.
+    lat_g, lng_g = pd.to_numeric(m.lat_g, errors="coerce"), pd.to_numeric(m.lng_g, errors="coerce")
+    d = np.hypot((m.lat - lat_g) * 111.0, (m.lng - lng_g) * 85.0)  # km
     ok = d <= 0.15
-    null_cols = ["google_id", "rating", "reviews", "price_level", "google_open", "types", "summary"]
+    null_cols = ["google_id", "rating", "reviews", "price_level", "google_open", "types", "summary", "cuisine_key_g"]
     m[null_cols] = m[null_cols].astype(object)
     m.loc[~ok, null_cols] = None
     m = m.sort_values("reviews", ascending=False).drop_duplicates("id")
@@ -103,13 +109,24 @@ def match(wprdc: pd.DataFrame, google: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([m[cols], extra[cols]], ignore_index=True)
 
 
+def fetch_all(cells: list[str]) -> pd.DataFrame:
+    """Parsed Google places across all cells. Falls back to an empty (correctly-columned) frame if the
+    fetch fails outright (e.g. quota exhausted) rather than aborting the whole ingest — match() then
+    degrades cleanly to WPRDC-only rows with source='wprdc'."""
+    try:
+        raw = [parse_place(p) for c in cells for p in fetch_cell(c)]
+    except requests.exceptions.RequestException as e:
+        print(f"google: fetch failed ({e}); writing WPRDC-only places (no Google data)")
+        raw = []
+    return pd.DataFrame(raw, columns=GOOGLE_COLS)
+
+
 def main():
     args = common.cli(__doc__)
     cells = search_cells()
     if args.limit:
         cells = cells[: args.limit]
-    raw = [parse_place(p) for c in cells for p in fetch_cell(c)]
-    google = pd.DataFrame(raw)
+    google = fetch_all(cells)
     common.save(google, "google_raw")
     places = match(common.load("places_wprdc"), google)
     common.save(places, "places")
