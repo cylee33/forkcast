@@ -79,6 +79,14 @@ out geom;"""
             continue
         merged = linemerge(MultiLineString(lines))
         line = max(merged.geoms, key=lambda g: g.length) if merged.geom_type == "MultiLineString" else merged
+        # OSM ways that touch the bbox carry their FULL geometry — clip to the
+        # corridor so midpoints (live-search centers) stay in the commercial stretch
+        from shapely.geometry import box
+        clipped = line.intersection(box(w, s, e, n))
+        if clipped.geom_type == "MultiLineString" and len(clipped.geoms):
+            clipped = max(clipped.geoms, key=lambda g: g.length)
+        if clipped.geom_type == "LineString" and len(clipped.coords) > 1:
+            line = clipped
         line = line.simplify(0.00004)
         feats.append({"type": "Feature",
                       "properties": {"name": name, "hood": hood, "range": list(rng)},
