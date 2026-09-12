@@ -6,14 +6,18 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from api.models import ConceptProfile
 from ml.popularity import popularity_available, score_profile
 
 router = APIRouter(prefix="/api", tags=["historical-popularity"])
 
 
+class PopularityProfile(BaseModel):
+    cuisines: list[str] = Field(min_length=1)
+    price_tier: int = Field(ge=1, le=4)
+
+
 class PopularityRequest(BaseModel):
-    profile: ConceptProfile
+    profile: PopularityProfile
     h3_ids: list[str] = Field(min_length=1, max_length=5_000)
 
 

@@ -5,6 +5,17 @@ conflict on merge.
 
 ## Codex ML integration
 
+### 2026-09-12 — UI prototype integration
+
+Created `codex/web-ml-integration` from `origin/web/ui-prototype`, merged the latest
+`origin/main`, and attached the optional artifact API to the single-file prototype.
+FastAPI now serves the UI and fixture from the same origin. Analyze requests the H3
+cells in the selected radius, and street cards, cell tooltips, and the detail panel show
+the historical popularity percentile separately from the opportunity score. The UI
+keeps working when artifacts are absent and visibly labels Pittsburgh as inference-only.
+Browser checks covered Frozen yogurt and Premium Korean BBQ; both returned live artifact
+responses and rendered different street-level historical percentiles.
+
 ### 2026-09-12 — local branch from updated main
 
 Created `codex/yelp-model-integration` at `f72f19c` in a separate worktree, preserving
