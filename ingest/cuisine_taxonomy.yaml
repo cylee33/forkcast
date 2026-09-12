@@ -1,0 +1,70 @@
+cuisines:
+  korean:      {aliases: [korean, kbbq, bibimbap, bulgogi, tteokbokki], complementary: [japanese, bubble_tea], substitutes: [japanese, chinese], default_price_tier: 2, default_dayparts: {lunch: .3, dinner: .5, late_night: .2}, default_catchment: walk, supplier_types: [asian_grocer, wholesale]}
+  japanese:    {aliases: [japanese, sushi, ramen, izakaya], complementary: [korean, bubble_tea], substitutes: [korean, chinese], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: walk, supplier_types: [asian_grocer, seafood]}
+  chinese:     {aliases: [chinese, szechuan, sichuan, cantonese, dim sum, hot pot], complementary: [bubble_tea], substitutes: [korean, thai], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [asian_grocer, wholesale]}
+  thai:        {aliases: [thai, pad thai], complementary: [vietnamese], substitutes: [vietnamese, chinese], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: walk, supplier_types: [asian_grocer]}
+  vietnamese:  {aliases: [vietnamese, pho, banh mi], complementary: [thai], substitutes: [thai], default_price_tier: 1, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: walk, supplier_types: [asian_grocer]}
+  indian:      {aliases: [indian, curry, tandoori, biryani], complementary: [], substitutes: [nepali, pakistani], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale]}
+  italian:     {aliases: [italian, pasta, trattoria, osteria], complementary: [wine_bar], substitutes: [pizza, mediterranean], default_price_tier: 3, default_dayparts: {dinner: .8, weekend: .2}, default_catchment: drive, supplier_types: [italian_grocer, wholesale]}
+  pizza:       {aliases: [pizza, pizzeria, neapolitan], complementary: [bar], substitutes: [italian], default_price_tier: 1, default_dayparts: {lunch: .3, dinner: .5, late_night: .2}, default_catchment: walk, supplier_types: [italian_grocer, wholesale]}
+  mexican:     {aliases: [mexican, taqueria, tacos, burrito], complementary: [bar], substitutes: [tex_mex, latin], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .4, late_night: .2}, default_catchment: walk, supplier_types: [wholesale, supermarket]}
+  american:    {aliases: [american, diner, grill, burgers, burger], complementary: [bar], substitutes: [gastropub, steakhouse], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: drive, supplier_types: [wholesale]}
+  steakhouse:  {aliases: [steakhouse, steak, chophouse], complementary: [wine_bar], substitutes: [american, seafood], default_price_tier: 4, default_dayparts: {dinner: .8, weekend: .2}, default_catchment: drive, supplier_types: [butcher, wholesale]}
+  seafood:     {aliases: [seafood, fish, oyster, crab], complementary: [wine_bar], substitutes: [steakhouse], default_price_tier: 3, default_dayparts: {dinner: .8, weekend: .2}, default_catchment: drive, supplier_types: [seafood, wholesale]}
+  cafe:        {aliases: [cafe, coffee, espresso, coffeehouse], complementary: [bakery], substitutes: [bakery], default_price_tier: 1, default_dayparts: {breakfast: .5, lunch: .3, afternoon: .2}, default_catchment: walk, supplier_types: [wholesale]}
+  bakery:      {aliases: [bakery, patisserie, donut, bagel], complementary: [cafe], substitutes: [cafe], default_price_tier: 1, default_dayparts: {breakfast: .6, lunch: .4}, default_catchment: walk, supplier_types: [wholesale]}
+  bar:         {aliases: [bar, pub, tavern, taproom, brewery], complementary: [pizza, american], substitutes: [gastropub, wine_bar], default_price_tier: 2, default_dayparts: {dinner: .3, late_night: .5, weekend: .2}, default_catchment: walk, supplier_types: [wholesale]}
+  mediterranean: {aliases: [mediterranean, hummus, falafel, gyro, shawarma], complementary: [greek, middle_eastern], substitutes: [greek, middle_eastern], default_price_tier: 2, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: walk, supplier_types: [wholesale]}
+  greek:       {aliases: [greek, gyro, souvlaki, moussaka], complementary: [mediterranean], substitutes: [mediterranean, middle_eastern], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: walk, supplier_types: [wholesale]}
+  middle_eastern: {aliases: [middle eastern, shawarma, falafel, kebab, hummus], complementary: [mediterranean, greek], substitutes: [mediterranean, turkish, lebanese], default_price_tier: 2, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: walk, supplier_types: [wholesale]}
+  turkish:     {aliases: [turkish, kebab, doner, baklava], complementary: [middle_eastern], substitutes: [middle_eastern, greek], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: walk, supplier_types: [wholesale]}
+  lebanese:    {aliases: [lebanese, shawarma, falafel, tabbouleh], complementary: [middle_eastern], substitutes: [middle_eastern, mediterranean], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: walk, supplier_types: [wholesale]}
+  ethiopian:   {aliases: [ethiopian, injera, eritrean], complementary: [], substitutes: [caribbean], default_price_tier: 2, default_dayparts: {lunch: .3, dinner: .7}, default_catchment: transit, supplier_types: [wholesale]}
+  caribbean:   {aliases: [caribbean, jamaican, jerk], complementary: [soul_food], substitutes: [latin, soul_food], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale]}
+  latin:       {aliases: [latin, latin american, pupusa, empanada], complementary: [mexican], substitutes: [mexican, caribbean], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale, supermarket]}
+  tex_mex:     {aliases: [tex mex, tex-mex, fajita, nachos], complementary: [bar], substitutes: [mexican, american], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .4, late_night: .2}, default_catchment: drive, supplier_types: [wholesale]}
+  peruvian:    {aliases: [peruvian, ceviche, pollo a la brasa], complementary: [seafood], substitutes: [latin, seafood], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [seafood, wholesale]}
+  brazilian:   {aliases: [brazilian, churrasco, rodizio], complementary: [steakhouse], substitutes: [steakhouse, latin], default_price_tier: 3, default_dayparts: {dinner: .8, weekend: .2}, default_catchment: drive, supplier_types: [butcher, wholesale]}
+  french:      {aliases: [french, bistro, brasserie, patisserie], complementary: [wine_bar], substitutes: [italian], default_price_tier: 4, default_dayparts: {dinner: .7, weekend: .3}, default_catchment: drive, supplier_types: [wholesale]}
+  spanish_tapas: {aliases: [spanish, tapas, paella], complementary: [wine_bar], substitutes: [mediterranean, italian], default_price_tier: 3, default_dayparts: {dinner: .7, weekend: .3}, default_catchment: drive, supplier_types: [wholesale]}
+  german:      {aliases: [german, bratwurst, biergarten], complementary: [bar], substitutes: [american, bar], default_price_tier: 2, default_dayparts: {dinner: .6, weekend: .4}, default_catchment: drive, supplier_types: [butcher, wholesale]}
+  polish:      {aliases: [polish, pierogi, kielbasa], complementary: [german], substitutes: [german, american], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale]}
+  soul_food:   {aliases: [soul food, fried chicken, collard greens, mac and cheese], complementary: [bbq], substitutes: [bbq, southern], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale, butcher]}
+  bbq:         {aliases: [bbq, barbecue, smokehouse, brisket, ribs], complementary: [bar], substitutes: [soul_food, southern], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: drive, supplier_types: [butcher, wholesale]}
+  southern:    {aliases: [southern, cajun, creole, gumbo], complementary: [soul_food], substitutes: [soul_food, bbq], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: drive, supplier_types: [wholesale]}
+  fried_chicken: {aliases: [fried chicken, chicken shack, wings], complementary: [bbq], substitutes: [soul_food, american], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .5, late_night: .1}, default_catchment: walk, supplier_types: [wholesale, butcher]}
+  sandwich_deli: {aliases: [sandwich, deli, delicatessen, sub, hoagie], complementary: [cafe], substitutes: [cafe, bakery], default_price_tier: 1, default_dayparts: {breakfast: .2, lunch: .6, afternoon: .2}, default_catchment: walk, supplier_types: [wholesale]}
+  salad_healthy: {aliases: [salad, healthy, grain bowl, poke bowl], complementary: [cafe], substitutes: [vegan, cafe], default_price_tier: 2, default_dayparts: {lunch: .6, dinner: .4}, default_catchment: walk, supplier_types: [supermarket, wholesale]}
+  vegan:       {aliases: [vegan, plant based, vegetarian], complementary: [salad_healthy], substitutes: [salad_healthy], default_price_tier: 2, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: walk, supplier_types: [supermarket, wholesale]}
+  breakfast_brunch: {aliases: [breakfast, brunch, pancakes, waffles], complementary: [cafe], substitutes: [cafe, american], default_price_tier: 2, default_dayparts: {breakfast: .6, lunch: .4}, default_catchment: walk, supplier_types: [wholesale]}
+  dessert_ice_cream: {aliases: [dessert, ice cream, gelato, frozen yogurt, creamery], complementary: [bakery], substitutes: [bakery, cafe], default_price_tier: 1, default_dayparts: {afternoon: .5, dinner: .3, late_night: .2}, default_catchment: walk, supplier_types: [wholesale]}
+  bubble_tea:  {aliases: [bubble tea, boba, tapioca tea], complementary: [korean, chinese], substitutes: [cafe], default_price_tier: 1, default_dayparts: {afternoon: .5, lunch: .2, dinner: .3}, default_catchment: walk, supplier_types: [asian_grocer, wholesale]}
+  wine_bar:    {aliases: [wine bar, wine, vineyard, enoteca], complementary: [italian, french], substitutes: [bar, gastropub], default_price_tier: 3, default_dayparts: {dinner: .7, late_night: .3}, default_catchment: drive, supplier_types: [wholesale]}
+  gastropub:   {aliases: [gastropub, pub food, public house], complementary: [bar], substitutes: [bar, american], default_price_tier: 2, default_dayparts: {dinner: .5, late_night: .3, weekend: .2}, default_catchment: walk, supplier_types: [wholesale]}
+  nepali:      {aliases: [nepali, momo, himalayan], complementary: [indian], substitutes: [indian, pakistani], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale]}
+  pakistani:   {aliases: [pakistani, halal, karahi, biryani], complementary: [indian], substitutes: [indian, nepali], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [wholesale, halal]}
+  filipino:    {aliases: [filipino, adobo, lumpia, sisig], complementary: [asian], substitutes: [vietnamese, chinese], default_price_tier: 1, default_dayparts: {lunch: .4, dinner: .6}, default_catchment: transit, supplier_types: [asian_grocer, wholesale]}
+  hawaiian_poke: {aliases: [hawaiian, poke, luau], complementary: [seafood], substitutes: [seafood, salad_healthy], default_price_tier: 2, default_dayparts: {lunch: .6, dinner: .4}, default_catchment: walk, supplier_types: [seafood, wholesale]}
+  halal:       {aliases: [halal, halal food], complementary: [middle_eastern, pakistani], substitutes: [middle_eastern, pakistani], default_price_tier: 1, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: transit, supplier_types: [halal, wholesale]}
+  kosher:      {aliases: [kosher, kosher deli], complementary: [sandwich_deli], substitutes: [sandwich_deli], default_price_tier: 2, default_dayparts: {lunch: .5, dinner: .5}, default_catchment: transit, supplier_types: [kosher, wholesale]}
+  food_hall:   {aliases: [food hall, food court, market hall], complementary: [], substitutes: [], default_price_tier: 2, default_dayparts: {lunch: .4, dinner: .4, weekend: .2}, default_catchment: transit, supplier_types: [wholesale]}
+chains:
+  - mcdonald's
+  - starbucks
+  - subway
+  - chipotle
+  - panera
+  - dunkin
+  - wendy's
+  - burger king
+  - taco bell
+  - domino's
+  - papa john's
+  - chick-fil-a
+  - five guys
+  - primanti          # local chain
+  - eat'n park        # local chain
+  - sheetz
+  - panda express
+  - qdoba
+  - jimmy john's
