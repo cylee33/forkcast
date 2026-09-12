@@ -115,3 +115,24 @@ derived fields (they match that zone's entry in `cells.features` exactly) and
 can be trusted for anything that reads scores rather than narrative text. See
 the comment in `ingest/make_fixtures.py` at the `zones.append(...)` call for
 where this is generated.
+
+## Phase 2 planning findings (not yet acted on)
+
+**The backtest sample is N=131, not the whole county.** Only 167 of 15,295 places
+carry a rating and review count, because Google enrichment reached ~4%. A Spearman
+correlation on 131 points will have a confidence interval wide enough to cross zero.
+Report the CI and the N alongside rho, and say "not distinguishable from chance" when
+it does — a bare rho on this sample would overstate what was measured.
+
+**`local_price_*` is absent on 97.4% of cells, not merely zero for tiers 3 and 4.**
+Only 477 of 18,275 cells have any priced place nearby. The earlier reading — that
+tiers 3 and 4 are a true measured zero — is right but incomplete: for most cells the
+whole price profile is absent, which is a different thing from a measured absence of
+expensive restaurants. A "make it premium" refine is therefore driven by income fit
+rather than by an observed high-end market.
+
+**Percentile base is a real open question.** Ranking Demand and Competition within the
+search area rather than county-wide is far cheaper — a county-wide per-request
+competition pass is roughly 25M place-cell pairs — but it breaks the proposal's
+promise in §5.5 that "80 means the same thing everywhere". Whichever is chosen, the
+interface must say which, because the two numbers are not comparable.
