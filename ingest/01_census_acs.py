@@ -46,7 +46,8 @@ def fetch() -> pd.DataFrame:
 
 def _share(df, num_cols, den_col):
     den = df[den_col].replace(0, pd.NA)
-    return (df[num_cols].sum(axis=1) / den).fillna(0).astype(float)
+    share = df[num_cols].sum(axis=1) / den
+    return pd.to_numeric(share, errors="coerce").fillna(0.0)
 
 
 def derive(df: pd.DataFrame) -> pd.DataFrame:
