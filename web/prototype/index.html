@@ -632,8 +632,7 @@ const HAND_STREETS = [
   { name: 'Liberty Avenue',  hood: 'Bloomfield',    range: [4400, 4800],path: [[-79.9522,40.4610],[-79.9480,40.4622],[-79.9440,40.4632]] },
 ];
 let STREETS = HAND_STREETS;
-fetch('/web/prototype/streets_real.geojson')
-  .then(r => (r.ok ? r.json() : null))
+fetchJSON('./streets_real.geojson', '/web/prototype/streets_real.geojson')
   .then(j => {
     if (!j || !j.features || !j.features.length) return;
     const byName = new Map(HAND_STREETS.map(s => [s.name, s]));
@@ -648,10 +647,8 @@ fetch('/web/prototype/streets_real.geojson')
 
 /* real open food places (places.parquet extract) + real cell demographics */
 let COMPETITORS = [], CELLPOINTS = [];
-fetch('/web/prototype/competitors.json')
-  .then(r => (r.ok ? r.json() : [])).then(j => { COMPETITORS = j || []; }).catch(() => {});
-fetch('/web/prototype/cellmeta.json')
-  .then(r => (r.ok ? r.json() : null))
+fetchJSON('./competitors.json', '/web/prototype/competitors.json').then(j => { COMPETITORS = j || []; });
+fetchJSON('./cellmeta.json', '/web/prototype/cellmeta.json')
   .then(j => {
     if (!j) return;
     CELLPOINTS = Object.entries(j).map(([id, m]) => {
@@ -664,8 +661,7 @@ fetch('/web/prototype/cellmeta.json')
 /* county-wide REAL feature store: 18,275 H3 cells exported from cell_features.parquet */
 let FULLINDEX = null;
 const bucketKey = (lat, lng) => `${Math.round(lat / 0.004)}_${Math.round(lng / 0.004)}`;
-fetch('/web/prototype/fullcells.json')
-  .then(r => (r.ok ? r.json() : null))
+fetchJSON('./fullcells.json', '/web/prototype/fullcells.json')
   .then(j => {
     if (!j) return;
     FULLINDEX = new Map();
@@ -795,11 +791,18 @@ let rankedStreets = [], selectedStreet = null, hoveredStreet = null;
 let streetMarkers = [], sfMarkers = [];
 let revMarker = null;
 
+/* works served from the repo root (local python server) OR from web/prototype as site root (Vercel) */
+async function fetchJSON(...paths) {
+  for (const p of paths) {
+    try { const r = await fetch(p); if (r.ok) return await r.json(); } catch { /* next */ }
+  }
+  return null;
+}
+
 let FIXTURE = null, fixtureCentroid = null, mode = 'synthetic', weightsTouched = false;
 let popularityByH3 = new Map(), popularityState = 'idle', popularityFallback = [];
 let BLOCKS = null;  // real street-bounded block polygons (Overpass -> shapely polygonize, offline)
-fetch('/web/prototype/blocks_oakland.geojson')
-  .then(r => (r.ok ? r.json() : null))
+fetchJSON('./blocks_oakland.geojson', '/web/prototype/blocks_oakland.geojson')
   .then(j => {
     if (!j || !j.features) return;
     BLOCKS = j.features.map(f => {
@@ -810,8 +813,7 @@ fetch('/web/prototype/blocks_oakland.geojson')
     });
   })
   .catch(() => {});
-fetch('/data/fixtures/recommend_sample.json')
-  .then(r => (r.ok ? r.json() : null))
+fetchJSON('/data/fixtures/recommend_sample.json', './recommend_sample.json')
   .then(j => {
     if (!j || !j.cells) return;
     FIXTURE = j;
@@ -1192,7 +1194,7 @@ function rippleReveal() {
 function rankStreets(concept, radM) {
   rankedStreets = STREETS.map(st => {
     const mid = st.path[Math.floor(st.path.length / 2)];
-    const distKm = km(center, [mid[1], mid[0]]);
+    const distKm = Math.min(...st.path.map(([plng, plat]) => km(center, [plat, plng])));
     // sample along the street
     const samples = st.path.map(([lng, lat]) => sampleAt(lat, lng, concept));
     const comp = ['D','C','T','S','uniProx'].reduce((o, k) => {
@@ -1209,7 +1211,7 @@ function rankStreets(concept, radM) {
       value.demographic_missing_count > 0 || value.outside_training_range_count > 0).length;
     return { ...st, mid, distKm, score, comp, real, historicalPopularityPct, historicalWarnings };
   })
-  .filter(st => st.distKm * 1000 <= radM + 700)
+  .filter(st => st.distKm * 1000 <= radM)   // some point of the street must lie inside the radius
   .sort((a, b) => b.score - a.score)
   .slice(0, 5);
   rankedStreets.forEach((st, i) => st.rank = i + 1);
