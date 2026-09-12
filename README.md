@@ -166,15 +166,23 @@ the start and updates it at the end.
 
 ## The data pipeline
 
-Every script under `ingest/` is idempotent, accepts `--limit N` for a smoke run,
-reads from `data/raw/`, writes a parquet to `data/processed/`, and upserts Postgres.
+Every script under `ingest/` is idempotent and accepts `--limit N` for a smoke run,
+reads from `data/raw/`, and writes a parquet to `data/processed/`. Seven of the twelve
+also upsert Postgres; the rest produce per-cell inputs that `12_build_features` joins,
+so `--no-db` is inert on those.
 
 ```bash
 make ingest                       # everything, in order
 make ingest STEP=04               # one step
 make ingest STEP=04 ARGS="--limit 50 --no-db"
 make sanity                       # static heatmaps to eyeball the feature store
+make fixtures                     # regenerate data/fixtures/ from the real store
 ```
+
+One caveat worth knowing before you run a single step: `STEP=00` rebuilds the grid, and
+`cell_features` has a foreign key into it, so step 0 clears `cell_features` and step 12
+repopulates it. A full `make ingest` handles that end to end. Running `make ingest
+STEP=00` on its own leaves the table empty until you rerun `STEP=12`.
 
 | Step | Source | What it produces |
 |---|---|---|
@@ -191,9 +199,18 @@ make sanity                       # static heatmaps to eyeball the feature store
 | `11_cuisine_affinity` | derived | Observed affinity per cuisine |
 | `12_build_features` | all of the above | `cell_features`: every column plus its metro-wide percentile |
 
-Each feature carries its `source`, its `resolution` and an `updated_at`, so the
-confidence score and the interface can both be honest about a ZIP-level number
-sitting inside a 170-metre hexagon.
+Each feature carries its `source` and `resolution`, and the `cell_features` table
+carries an `updated_at`, so the confidence score and the interface can both be honest
+about a ZIP-level number sitting inside a 170-metre hexagon. Two details to know before
+you read those columns, both spelled out in `contracts/cell_features.md`:
+
+- **`dist_to_*_pct` is inverted** — 100 means closest, not farthest. A scoring engine
+  that applies the natural "distance is bad, so invert the percentile" will invert
+  twice and get Access and Suppliers exactly backwards.
+- **`source` and `resolution` are methodology labels, not per-row provenance.** For
+  rent and traffic the per-row columns win: `rent_source`, `rent_resolution`,
+  `rent_confidence` and `traffic_source`. The parquet has no `updated_at`; only the
+  database table does.
 
 ### Provider adapters
 
@@ -320,26 +337,44 @@ integration runs ruff and pytest on every push and pull request.
 
 ## Current status
 
-Foundation phase, eight of sixteen tasks complete. Twenty-two tests pass and lint is
-clean.
+Foundation phase complete — all sixteen tasks. Sixty-eight tests pass, lint is clean,
+and the sanity run reports one known gap.
 
 | Built | Rows |
 |---|---|
 | `geo_cells` — the H3 grid | 18,275 |
+| `acs` — demographics, income and age mix | 18,275 cells × 20 columns |
 | `lodes` — daytime workers | 18,267 cells, 686,253 workers |
 | `osm_cells` — anchors, access, suppliers, transit | 18,275 cells × 30 columns |
-| `places_wprdc` — food facilities | 15,215, of which 9,970 are open |
+| `places` — WPRDC food facilities merged with Google | 15,295, of which 10,050 are open |
+| `place_embeddings` — competitor similarity vectors | 900 of 15,295 places |
+| `activity_cells` — daypart activity | 18,275 cells, all `traffic_source = proxy` |
+| `spend` — spending capacity and local price mix | 18,275 cells |
+| `affinity` — observed cuisine affinity | 18,275 cells × 49 cuisines |
 | `suppliers` | 242, including 5 hand-listed wholesalers |
+| **`cell_features` — the handoff artifact** | **18,275 cells × 132 columns** |
 
 The features check out against geography we can verify by eye. Downtown leads
 walkability and transit, the South Side has the most bars, Oakland has the
 universities, the outer suburbs are empty, and supplier distances run from 340 metres
 in the Strip District to 22 kilometres in Sewickley.
 
-**What is blocked.** Every remaining ingest step needs an API key. Google's is the
-one that matters most: restaurant names alone identify a cuisine for only 48% of open
-places, and just three Korean restaurants match, which would leave the Korean demo
-concept with nothing to score competition against. Google's place types fix that.
+### What is partial, and why that is written down rather than filled in
+
+Three external quotas ran out mid-build. Nothing was fabricated to cover for them —
+where a value is unknown it is `NULL`, never a plausible-looking number, and the
+per-row `source`, `rent_source` and `traffic_source` columns say which is which.
+
+| Gap | State | What lifts it |
+|---|---|---|
+| Rent | `est_rent_psf_yr` is NULL on every cell | 20–50 hand-collected asking rents in `data/rents_manual.csv` |
+| Google Places | Reached ~4% of the county; cuisine identified for 48.6% of open places, 3 Korean | A billing account on the Cloud project, then `make ingest STEP=05` |
+| Embeddings | 900 of 15,295 places | Gemini's daily quota resetting, then `make ingest STEP=08` |
+| Foot traffic | Proxy everywhere; all 58 BestTime responses came back `null` | Understanding the null responses before spending more |
+| Census | 288 cells have no income estimate | Nothing — the Census itself cannot estimate them |
+
+The Cost sub-score should run at weight 0 and renormalise until rents arrive, which the
+cut order already anticipates. Everything else degrades rather than blocks.
 
 `brain/tasks.md` has the per-task state and `brain/progress.md` has the detail.
 
