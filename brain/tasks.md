@@ -18,17 +18,17 @@ Checkbox state is the source of truth for what is built. Task numbers match
 | 2 | Contracts + Pydantic/TypeScript mirrors | [x] done | `5e17f4d` |
 | 3 | `brain/` team files + `.claude/agents` | [x] done | `f7f1e15` |
 | 4 | `ingest/common.py` + `00_grid.py` | [x] done | `ea0fc68`, `e97b492` |
-| 5 | `01_census_acs.py` | [x] code done, data blocked | `d2c6663` |
+| 5 | `01_census_acs.py` | [x] done, acs.parquet loaded | `d2c6663`, `3d09c06` |
 | 6 | `02_lodes.py` | [x] done | `47ce776` |
 | 7 | `03_wprdc_food.py` + `cuisine_taxonomy.yaml` | [x] done | `a6a35c5`, `ef2ab38` |
 | 8 | `04_osm_pois.py` (+ GTFS) | [x] done | `39c11e3`, `c1a0322` |
-| 9 | `05_google_places.py` | [ ] | |
-| 10 | `07_besttime.py` | [ ] | |
-| 11 | `08_place_embeddings.py` | [ ] | |
-| 12 | `09_spend_capacity.py` | [ ] | |
-| 13 | `10_rent_proxy.py` + `rents_manual.csv` | [ ] | |
-| 14 | `11_cuisine_affinity.py` | [ ] | |
-| 15 | `12_build_features.py` | [ ] | |
+| 9 | `05_google_places.py` | [x] code done, county run deferred on GCP quota | `b0417c4`, `c0c333d`, `9807ed2` |
+| 10 | `07_besttime.py` | [x] code done, proxy path run; real traffic pending user go-ahead | `ff90346` |
+| 11 | `08_place_embeddings.py` | [x] code done, 900/15,295 embedded (Gemini daily quota) | `a74f5b1`, `7a82853` |
+| 12 | `09_spend_capacity.py` | [x] done | `2f68c84` |
+| 13 | `10_rent_proxy.py` + `rents_manual.csv` | [x] code done, data run deferred on manual rents | `e651792`, `93b4179`, `00aad69` |
+| 14 | `11_cuisine_affinity.py` | [x] done (pct floor fixed in `98b3da1`) | `5d155bb`, `98b3da1` |
+| 15 | `12_build_features.py` | [x] done — cell_features 18,275 x 132 | `d5e1441`, `4a52a24` |
 | 16 | `sanity.py` + fixtures | [ ] | |
 
 ### Manual tasks for Dev 1, blocking the tasks named
