@@ -111,6 +111,96 @@ now that Census and Google keys exist. Task 11 waits on `GEMINI_API_KEY`, and
 Task 13 waits on the hand-collected rents in `data/rents_manual.csv`.
 
 
+### 2026-09-12 — Session 3 (final whole-branch review fix wave)
+
+**All sixteen Phase 1 tasks are now complete**, including Task 16
+(`sanity.py` + fixtures), which Session 2 had left unchecked. `brain/tasks.md`
+is corrected to match.
+
+**Seven review findings fixed, applied locally, no live API calls made** (every
+key in `.env` is quota-exhausted or spend-sensitive; `CENSUS_API_KEY` was not
+called either — `01_census_acs.py` re-parsed the already-cached
+`data/raw/acs/bg_2023.json`):
+
+1. **The Census jam-value defect (headline finding).** `-666666666` ("estimate
+   not available") was being `clip(lower=0)`-ed into a plausible $0 income.
+   Fixed at three points: `01_census_acs.py` masks any value at or below the
+   smallest ACS jam sentinel to NaN before clipping; `common.py`'s
+   `area_weight` now divides each intensive column by its own per-column
+   non-null intersection area, not the shared `_ia` sum, so a cell whose only
+   source is a jam block group comes out NaN instead of diluted-toward-zero;
+   and `12_build_features.py` stops re-zeroing that NaN for
+   `median_hh_income` / `avg_hh_size` specifically in the join step (a third,
+   necessary edit beyond the two originally scoped — the blanket
+   `fillna(0.0)` in the per-column join loop was silently re-introducing the
+   same defect one step downstream; those two ACS columns are the only ones
+   where a present-but-NaN value is possible, since ACS covers every cell).
+   Verified against the real Allegheny County run: 288 cells went from
+   `median_hh_income == 0` to `NaN` (263 of them have real population, 14,942
+   people), 0 cells now read exactly `$0`, and the 45 cells with a genuine
+   Census estimate between $9.5k–$15k are byte-for-byte unchanged.
+2. **`00_grid.py` couldn't rerun against a populated DB** — its `DELETE FROM
+   geo_cells` ran outside the transaction that also deletes/reinserts, and
+   `cell_features` FKs to it with no cascade. Collapsed into one
+   `engine().begin()` block, `cell_features` deleted before `geo_cells`.
+   Verified live: `STEP=00` now succeeds against the populated DB (18,275
+   cells reloaded, `cell_features` correctly emptied pending the `STEP=12`
+   rerun, all five key constraints intact afterward).
+3. **`08_place_embeddings.py` aborted `make ingest` at step 08 for anyone
+   without `GEMINI_API_KEY`** — `genai.Client()` was constructed
+   unconditionally. Now constructed only when there's something to embed and
+   a key exists; otherwise it prints the skip count and still emits the
+   parquet from cache. Verified with the key unset (via `os.environ.pop`,
+   not by touching `.env`) and `genai.Client` monkeypatched to raise if
+   called — it did not get called.
+4. **Two contract gaps** in `contracts/cell_features.md`: `dist_to_*_pct` is
+   documented as inverted (100 = closest, not farthest — a scoring engine
+   would otherwise double-invert it), and `source`/`resolution` are now
+   labeled as static methodology maps, not per-row provenance (the row-level
+   `rent_source`/`rent_resolution`/`rent_confidence`/`traffic_source` columns
+   are authoritative for rent and traffic). Also noted: the parquet has no
+   `updated_at`; only the DB table does.
+5. This progress/tasks update.
+6. `12_build_features.py` no longer emits a bare `float(r[d])` for
+   `activity_by_daypart` (NaN now serializes to JSON `null`, matching the
+   existing guard on `features`), and `traffic_source` defaults to `"proxy"`
+   only when `activity_cells` was actually joined — not when the whole part
+   is absent.
+7. `sanity.py`'s `COLS` now watches `median_hh_income`; `_merge_chunks` in
+   `01_census_acs.py` asserts the inner join doesn't drop rows.
+
+**Tests added:** jam masking (`test_acs.py`), the area-weight per-column
+denominator including the full-NaN case (`test_common.py`), the
+`_merge_chunks` row-drop assertion (`test_acs.py`), the embeddings key-absent
+path (`test_embeddings.py`), and the `traffic_source`/`activity_by_daypart`
+absent-part and jam-NaN-survives-the-join cases (`test_build_features.py`).
+68 tests pass (up from 61 — one bugfix cycle: the first area-weight fix
+attempt referenced `out["_ia"]` before it was assigned; caught immediately by
+running the new tests before committing), zero warnings, `ruff check .` clean.
+
+**The partial-data reality, unchanged from Session 2 and confirmed still
+true after these reruns:** `est_rent_psf_yr` is NaN for all 18,275 cells
+(rent.parquet was never built — Task 13's data run is still deferred on the
+manual rents collection); 900 of 15,295 places have a Gemini embedding
+(daily quota hit mid-run); Google contributed to 175 of 15,295 places (95
+matched + 80 Google-only) and to price-level data on about 2.6% of cells
+(477 of 18,275) — the county-wide Google run is still deferred on GCP quota;
+`traffic_source` is `"proxy"` for all 18,275 cells (BestTime real-traffic run
+still pending user go-ahead).
+
+**Pick up here next:** the data foundation is feature-complete and
+internally consistent; nothing is blocked on code anymore. What's left is
+entirely quota/key-and-money decisions the user owns: (a) collect 20–50
+manual rents into `data/rents_manual.csv` to unblock Task 13's real run, (b)
+decide whether/when to spend the Google Places budget for full county
+coverage, (c) decide whether to let the Gemini embeddings job keep running
+across multiple days against the daily quota, (d) decide whether to spend on
+BestTime's real traffic. None of these require further code changes — the
+scripts already degrade honestly (NaN/proxy) in their absence, and `make
+ingest STEP=<n>` reruns cleanly once a decision unlocks a key. See
+`.superpowers/sdd/2026-09-12-foundation-data-pipeline/final-fix-report.md`
+for the full review-fix report.
+
 ## Dev 2
 
 _Not yet started. Backend track, Phase 2 of `brain/tasks.md`._

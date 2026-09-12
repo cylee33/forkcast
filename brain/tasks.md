@@ -10,7 +10,7 @@ Checkbox state is the source of truth for what is built. Task numbers match
 - [x] Write the foundation plan `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`
 - [x] Create the GitHub repo `cylee33/forkcast` and the `data/foundation` branch
 
-## Phase 1: Foundation [P1] — in progress (8 of 16 tasks)
+## Phase 1: Foundation [P1] — complete (16 of 16 tasks)
 
 | # | Task | State | Commit |
 |---|---|---|---|
@@ -29,7 +29,7 @@ Checkbox state is the source of truth for what is built. Task numbers match
 | 13 | `10_rent_proxy.py` + `rents_manual.csv` | [x] code done, data run deferred on manual rents | `e651792`, `93b4179`, `00aad69` |
 | 14 | `11_cuisine_affinity.py` | [x] done (pct floor fixed in `98b3da1`) | `5d155bb`, `98b3da1` |
 | 15 | `12_build_features.py` | [x] done — cell_features 18,275 x 132 | `d5e1441`, `4a52a24` |
-| 16 | `sanity.py` + fixtures | [ ] | |
+| 16 | `sanity.py` + fixtures | [x] done | `ea322f7`, `d1c87a0` |
 
 ### Manual tasks for Dev 1, blocking the tasks named
 
@@ -37,7 +37,7 @@ Checkbox state is the source of truth for what is built. Task numbers match
 - [x] WPRDC food-facilities resource id found and set (`112a3821-334d-4f3f-ab40-4de1220b1a0a`)
 - [x] `GOOGLE_PLACES_API_KEY` provisioned and set in `.env` — unblocks Tasks 9, 11 and 14. Estimated ~3,600 requests, about $117, inside Google's free monthly credit. Cuisine is identifiable for only 48% of open restaurants without it
 - [ ] Provision `BESTTIME_API_KEY_PRIVATE` — blocks Task 10's real traffic (the proxy path still runs without it)
-- [ ] Provision `GEMINI_API_KEY` — blocks Task 11 (embeddings) and all of Phase 2 (concept parse, refine, explain)
+- [x] `GEMINI_API_KEY` provisioned and set in `.env` — Task 11 ran against it (900/15,295 embedded before the daily quota hit); the key is now quota-exhausted, so Phase 2's LLM calls (parse, refine, explain) remain blocked on quota resetting or a new key, not on provisioning
 - [ ] Hand-collect 20–50 asking rents into `data/rents_manual.csv` — blocks Task 13
 - [x] Wholesale suppliers hand-listed in `data/suppliers_manual.csv` (5 of 6; US Foods omitted, address unverifiable)
 
