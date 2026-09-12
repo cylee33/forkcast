@@ -1,0 +1,17 @@
+services:
+  db:
+    build: ./docker/db
+    environment:
+      POSTGRES_USER: forkcast
+      POSTGRES_PASSWORD: forkcast
+      POSTGRES_DB: forkcast
+    ports: ["5432:5432"]
+    volumes:
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forkcast"]
+      interval: 5s
+      retries: 10
+volumes:
+  dbdata:

@@ -1,0 +1,17 @@
+pandas==2.2.2
+pyarrow==17.0.0
+geopandas==1.0.1
+shapely==2.0.6
+h3==4.1.2
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3
+requests==2.32.3
+pyyaml==6.0.2
+voyageai==0.3.2
+numpy==1.26.4
+scipy==1.14.1
+matplotlib==3.9.2
+python-dotenv==1.0.1
+pytest==8.3.3
+ruff==0.6.9
+pydantic==2.9.2
