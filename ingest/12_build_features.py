@@ -33,6 +33,11 @@ SOURCE = {**{c: "acs_5yr_2023" for c in ACS}, **{c: "lodes_wac_2021" for c in LO
 RESOLUTION = {**{c: "block_group" for c in ACS + LODES}, **{c: "point" for c in OSM + ACTIVITY + SPEND[1:] + DERIVED},
               "spending_capacity": "block_group", "est_rent_psf_yr": "zip"}
 DIST_FILL = 25.0
+# median_hh_income and avg_hh_size are the two ACS columns Fix 1 masks to NaN at the block-group
+# jam sentinel (Census "estimate not available"). Every h3 cell gets an "acs" row -- area_weight
+# never leaves a cell uncovered -- so any NaN reaching this join for these two columns is always a
+# genuine jam mask, never missing coverage. fillna(0.0) below must not re-zero it.
+NO_ZERO_FILL = {"median_hh_income", "avg_hh_size"}
 
 # Parts loaded by main(); "rent" is included here but main() only loads parts whose parquet actually
 # exists on disk (Task 13's rent.parquet is deliberately absent -- see module docstring / task brief).
@@ -54,8 +59,15 @@ def join_all(parts: dict[str, pd.DataFrame], cells: pd.DataFrame, places: pd.Dat
             continue
         if c not in df:
             df[c] = 0.0
-        df[c] = df[c].fillna(DIST_FILL if c.startswith("dist_to_") else 0.0).astype(float)
-    df["traffic_source"] = df.get("traffic_source", pd.Series("proxy", index=df.index)).fillna("proxy")
+        if c in NO_ZERO_FILL:
+            df[c] = df[c].astype(float)
+        else:
+            df[c] = df[c].fillna(DIST_FILL if c.startswith("dist_to_") else 0.0).astype(float)
+    if "activity_cells" in parts:
+        df["traffic_source"] = df.get("traffic_source", pd.Series("proxy", index=df.index)).fillna("proxy")
+    else:
+        # activity_cells itself was never joined -- there is no measurement to label, real or proxy.
+        df["traffic_source"] = df.get("traffic_source", pd.Series(None, index=df.index))
     df["rent_source"] = df.get("rent_source", pd.Series(None, index=df.index))
     df["rent_resolution"] = df.get("rent_resolution", pd.Series(None, index=df.index))
     df["rent_confidence"] = df.get("rent_confidence", pd.Series(0.0, index=df.index)).fillna(0.0)
@@ -65,6 +77,10 @@ def join_all(parts: dict[str, pd.DataFrame], cells: pd.DataFrame, places: pd.Dat
 
 
 def add_percentiles(df: pd.DataFrame) -> pd.DataFrame:
+    # dist_to_* is inverted (100 - pct) so closer scores higher. A large tie block at a distance
+    # column's max (e.g. many cells all hitting DIST_FILL) would land near 90 rather than near 0 --
+    # benign today since every distance column has exactly one cell at its max, none at DIST_FILL,
+    # but worth knowing if a future sparser anchor type reintroduces a tied ceiling.
     pct = {f"{c}_pct": (100.0 - common.pct(df[c])) if c.startswith("dist_to_") else common.pct(df[c]) for c in NUMERIC}
     return pd.concat([df, pd.DataFrame(pct, index=df.index)], axis=1)
 
@@ -88,7 +104,7 @@ def main():
         # rejects. Serialize it as JSON null instead, so the absence is honest there too.
         rows = [{"h3": r.h3, "features": json.dumps({c: (None if pd.isna(r[c]) else float(r[c])) for c in num_cols}),
                  "cuisine_affinity": json.dumps(r.cuisine_affinity),
-                 "activity_by_daypart": json.dumps({d.removeprefix("activity_"): float(r[d]) for d in ACTIVITY}),
+                 "activity_by_daypart": json.dumps({d.removeprefix("activity_"): (None if pd.isna(r[d]) else float(r[d])) for d in ACTIVITY}),
                  "traffic_source": r.traffic_source, "rent_source": r.rent_source, "rent_resolution": r.rent_resolution,
                  "rent_confidence": float(r.rent_confidence), "source": json.dumps(SOURCE), "resolution": json.dumps(RESOLUTION)}
                 for _, r in df.iterrows()]
