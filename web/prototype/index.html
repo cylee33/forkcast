@@ -1152,7 +1152,7 @@ async function geminiNarrateWhy(st, metrics) {
   return withTimeout(geminiCall({
     contents: [{ parts: [{ text:
       `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write exactly two crisp sentences of plain prose on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate, no JSON, no quotes, no markdown.\n\n${JSON.stringify(metrics)}` }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1200 },
+    generationConfig: { temperature: 0.4 },
   }), 9000);
 }
 
@@ -1531,6 +1531,7 @@ function openWhy(i) {
   // Gemini narrates the computed numbers (never invents, never ranks)
   geminiNarrateWhy(st, Object.fromEntries(M.map(([l, v]) => [l, v]))).then(txt => {
     if (!txt || selectedStreet !== i) return;
+    wrap.querySelectorAll('.gem-note').forEach(n => n.remove());   // re-entry guard: one note only
     const note = document.createElement('div');
     note.className = 'gem-note';
     note.innerHTML = `<b>✦ GEMINI · NARRATING COMPUTED NUMBERS ONLY</b>${txt}`;
