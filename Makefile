@@ -29,7 +29,7 @@ test:
 	$(PY) -m pytest -q
 
 lint:
-	$(PY) -m ruff check ingest api tests
+	$(PY) -m ruff check .
 
 restore-data:
 	unzip -o data/processed.zip -d data/
