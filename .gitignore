@@ -11,3 +11,7 @@ __pycache__/
 data/processed.zip
 *.png
 !data/fixtures/**
+
+# Yelp Dataset Terms restrict third-party sharing of Data and related metrics.
+# Runtime artifacts stay local unless Yelp separately approves their release.
+ml/artifacts/

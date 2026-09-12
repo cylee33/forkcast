@@ -2,6 +2,13 @@
 
 Task-level state lives in `brain/tasks.md`; this file holds the decisions and the schedule.
 
+> **2026-09-12 optional ML integration:** `codex/yelp-model-integration` starts at
+> `origin/main` commit `f72f19c`. It adds a local-only `ml.popularity.score_profile`
+> adapter for the completed historical Yelp popularity experiment. The signal stays
+> outside the seven opportunity subscores and response contracts. Yelp-derived runtime
+> assets and evaluation metadata are ignored because the Dataset Terms restrict public
+> release; the branch is not ready to push those artifacts.
+
 This plan is derived from the design spec (`docs/superpowers/specs/2026-09-12-forkcast-design.md`, sections 1 and 6) and from the 24-hour build order in `forkcast-proposal.md` §8, with the properties feature removed (cut per decision D7) and reverse mode moved earlier in the schedule (core scope per decision D5).
 
 ## Decisions

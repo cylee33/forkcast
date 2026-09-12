@@ -2,6 +2,23 @@
 
 Struggles, surprises, and trial-and-error worth not repeating.
 
+## Optional ML integration
+
+**A candidate percentile must have a stable reference population.** Ranking only the
+currently requested cells made the same H3 change value when the map radius changed.
+The adapter now predicts and ranks against all 18,275 Pittsburgh cells before returning
+the requested subset.
+
+**Model coverage is not product confidence.** Arbitrary 0.55/0.35 confidence values were
+removed. The adapter preserves direct missing-input and out-of-training-range counts so
+the eventual backend can disclose coverage without implying calibration.
+
+**Yelp-derived runtime assets are not ordinary open-source build artifacts.** The local
+Dataset Terms restrict third-party sharing of Data and related metrics and require Yelp
+review before public presentation/publication involving the Data or Yelp brand. The
+public branch must keep the trained model, derived lookup, and evaluation metadata out
+unless that release is separately cleared.
+
 ## Environment
 
 **The machine had neither Python 3.11 nor Docker.** The pinned wheels
