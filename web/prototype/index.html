@@ -645,6 +645,19 @@ let revMarker = null;
 
 let FIXTURE = null, fixtureCentroid = null, mode = 'synthetic', weightsTouched = false;
 let popularityByH3 = new Map(), popularityState = 'idle', popularityFallback = [];
+let BLOCKS = null;  // real street-bounded block polygons (Overpass -> shapely polygonize, offline)
+fetch('/web/prototype/blocks_oakland.geojson')
+  .then(r => (r.ok ? r.json() : null))
+  .then(j => {
+    if (!j || !j.features) return;
+    BLOCKS = j.features.map(f => {
+      const ring = f.geometry.coordinates[0];
+      let cx = 0, cy = 0;
+      for (const [x, y] of ring) { cx += x; cy += y; }
+      return { ring, lng: cx / ring.length, lat: cy / ring.length };
+    });
+  })
+  .catch(() => {});
 fetch('/data/fixtures/recommend_sample.json')
   .then(r => (r.ok ? r.json() : null))
   .then(j => {
@@ -799,22 +812,40 @@ async function analyze() {
 
   const latStep = BOARD_STEP_M / 111320;
   const lngStep = BOARD_STEP_M / (111320 * Math.cos(center[0] * Math.PI / 180));
-  const n = Math.ceil(radM / BOARD_STEP_M);
-  const g = 0.94; // shrink factor: thin cream gaps between squares = board lines
   board = [];
-  for (let iy = -n; iy <= n; iy++) {
-    for (let ix = -n; ix <= n; ix++) {
-      const lat = center[0] + iy * latStep, lng = center[1] + ix * lngStep;
-      if (km([lat, lng], center) * 1000 > radM) continue;
-      const s = sampleAt(lat, lng, concept);
+  const inRadiusBlocks = BLOCKS
+    ? BLOCKS.filter(b => km([b.lat, b.lng], center) * 1000 <= radM)
+    : [];
+  if (inRadiusBlocks.length >= 25) {
+    // real street-bounded blocks — the city's own grid is the board
+    for (const b of inRadiusBlocks) {
+      const s = sampleAt(b.lat, b.lng, concept);
       board.push({
-        lat, lng, comp: s.comp, real: s.real, h3: s.h3, historical: null,
-        wave: Math.max(Math.abs(ix), Math.abs(iy)),
-        poly: [
-          [lng - lngStep/2*g, lat - latStep/2*g], [lng + lngStep/2*g, lat - latStep/2*g],
-          [lng + lngStep/2*g, lat + latStep/2*g], [lng - lngStep/2*g, lat + latStep/2*g],
-        ],
+        lat: b.lat, lng: b.lng, comp: s.comp, real: s.real,
+        h3: s.h3 || h3.latLngToCell(b.lat, b.lng, 9), historical: null,
+        wave: Math.round(km([b.lat, b.lng], center) * 1000 / BOARD_STEP_M),
+        poly: b.ring,
       });
+    }
+  } else {
+    // square-lattice fallback where block polygons aren't precomputed yet
+    const n = Math.ceil(radM / BOARD_STEP_M);
+    const g = 0.94; // shrink factor: thin cream gaps between squares = board lines
+    for (let iy = -n; iy <= n; iy++) {
+      for (let ix = -n; ix <= n; ix++) {
+        const lat = center[0] + iy * latStep, lng = center[1] + ix * lngStep;
+        if (km([lat, lng], center) * 1000 > radM) continue;
+        const s = sampleAt(lat, lng, concept);
+        board.push({
+          lat, lng, comp: s.comp, real: s.real,
+          h3: s.h3 || h3.latLngToCell(lat, lng, 9), historical: null,
+          wave: Math.max(Math.abs(ix), Math.abs(iy)),
+          poly: [
+            [lng - lngStep/2*g, lat - latStep/2*g], [lng + lngStep/2*g, lat - latStep/2*g],
+            [lng + lngStep/2*g, lat + latStep/2*g], [lng - lngStep/2*g, lat + latStep/2*g],
+          ],
+        });
+      }
     }
   }
   const w = getWeights();
@@ -1229,7 +1260,9 @@ function render() {
       data: board.filter(c => c.score >= cut),
       getPolygon: d => d.poly,
       pickable: true,
-      stroked: false,
+      stroked: true,
+      getLineColor: [247, 242, 233, 255],
+      getLineWidth: 2, lineWidthUnits: 'pixels',
       getFillColor: d => {
         const t = (d.score - cut) / Math.max(.05, 1 - cut);
         const [r, g, b] = rampColor(t);
