@@ -939,7 +939,7 @@ FIXTURES = ROOT / "data/fixtures"
 H3_RES = 9
 BBOX = (40.18, -80.37, 40.68, -79.68)  # south, west, north, east
 STATE_FIPS, COUNTY_FIPS = "42", "003"
-EQUAL_AREA = "EPSG:6565"  # NAD83(2011) Pennsylvania South, meters
+EQUAL_AREA = "EPSG:6933"  # World equal-area (meters); valid for tests anywhere and for Allegheny County
 
 
 def engine():
@@ -1960,7 +1960,7 @@ def match(wprdc: pd.DataFrame, google: pd.DataFrame) -> pd.DataFrame:
     m["source"] = np.where(m.google_id.notna(), "wprdc+google", "wprdc")
     m["is_open"] = m.is_open & m.google_open.fillna(True).astype(bool)
     m["cuisine_key"] = m.cuisine_key.fillna(m.get("cuisine_key_g"))
-    m["categories"] = [list(c) + list(t or []) for c, t in zip(m.categories, m.types)]
+    m["categories"] = [list(c) + (list(t) if isinstance(t, list) else []) for c, t in zip(m.categories, m.types)]
     m["is_chain"] = m.name.map(taxonomy.is_chain)
     m["provider_id"] = m.provider_id.astype(str)
     # Google-only places (no WPRDC match): keep as their own rows
