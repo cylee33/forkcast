@@ -1501,11 +1501,11 @@ function openWhy(i) {
   const spendSub = meta && meta.spend != null ? 'CEX × ACS food-away-from-home' : 'synthetic estimate';
   const M = [
     ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100, compSub, 'comp'],
-    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', 'demand'],
-    ['Student share', students + '%', students * 2.2, studentsSub, 'students'],
     ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, spendSub, 'spend'],
     ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', 'supply'],
+    ['Student share', students + '%', students * 2.2, studentsSub, 'students'],
     ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted', 'traffic'],
+    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', 'demand'],
   ];
   if (st.historicalPopularityPct !== null) M.unshift([
     'Historical popularity signal', ordinal(st.historicalPopularityPct) + ' percentile',
