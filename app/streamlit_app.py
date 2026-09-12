@@ -70,23 +70,21 @@ st.markdown(
     }}
     .stApp {{ background: {GROUND}; }}
     header[data-testid="stHeader"] {{ background: transparent; }}
+    [data-testid="stDecoration"] {{ display: none; }}
     .block-container {{ padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1440px; }}
     section[data-testid="stSidebar"] {{ background: {PANEL}; border-right: 1px solid {LINE}; }}
     section[data-testid="stSidebar"] .block-container {{ padding-top: 1.4rem; }}
     h1, h2, h3 {{ letter-spacing: -0.015em; font-weight: 600; }}
     h3 {{ font-size: 1.02rem; color: {INK}; margin-bottom: 0.3rem; }}
     hr {{ border-color: {LINE}; }}
-
     .fc-wordmark {{ font-size: 1.55rem; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: {INK}; }}
     .fc-wordmark span {{ display:inline-block; width: 0.55em; height: 0.55em; background: {AMBER}; margin-right: 0.35em; vertical-align: -0.02em; }}
     .fc-tagline {{ color: {MUTED}; font-size: 0.86rem; margin-top: 0.2rem; }}
-
     .fc-banner {{ padding: 0.55rem 0.9rem; margin: 0.4rem 0 0.8rem; background: rgba(255, 209, 102, 0.08);
                   border-left: 3px solid {AMBER}; font-size: 0.9rem; color: {INK}; }}
     .fc-caption {{ color: {MUTED}; font-size: 0.82rem; }}
     .fc-nodata {{ color: {MUTED}; font-style: italic; }}
     .fc-swatch {{ display:inline-block; width: 22px; height: 10px; vertical-align: middle; }}
-
     .fc-zone {{ display:grid; grid-template-columns: 2.2rem 1fr 3.2rem 6.5rem; gap: 0.6rem; align-items: center;
                 padding: 0.5rem 0.6rem; border-bottom: 1px solid {LINE}; }}
     .fc-zone.sel {{ background: rgba(46, 196, 182, 0.09); border-left: 3px solid {TEAL}; padding-left: calc(0.6rem - 3px); }}
@@ -95,14 +93,12 @@ st.markdown(
     .fc-zone .total {{ color: {INK}; font-weight: 600; font-size: 1.05rem; text-align: right; }}
     .fc-track {{ height: 6px; background: {LINE}; }}
     .fc-fill {{ height: 6px; background: linear-gradient(90deg, {TEAL}, {AMBER}); }}
-
     .fc-big {{ font-size: 2.6rem; font-weight: 600; line-height: 1; color: {INK}; letter-spacing: -0.03em; }}
     .fc-big small {{ font-size: 0.85rem; font-weight: 400; color: {MUTED}; margin-left: 0.4rem; letter-spacing: 0; }}
     .fc-row {{ display:grid; grid-template-columns: 6.2rem 1fr 3rem; gap: 0.7rem; align-items:center; padding: 0.28rem 0; }}
     .fc-row .lbl {{ color: {MUTED}; font-size: 0.86rem; }}
     .fc-row .val {{ color: {INK}; text-align: right; font-size: 0.9rem; }}
     .fc-gap {{ display:inline-block; padding: 0.1rem 0.45rem; border: 1px solid {TEAL}; color: {TEAL}; font-size: 0.72rem; }}
-
     div[data-testid="stTabs"] button {{ font-weight: 500; }}
     .stButton > button {{ border-radius: 2px; }}
     div[data-testid="stTextInput"] input {{ border-radius: 2px; background: {PANEL}; }}
