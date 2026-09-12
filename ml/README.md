@@ -28,6 +28,17 @@ When they are absent, it returns an unchanged copy by default. Pass `required=Tr
 if a private deployment should fail instead. The current response schema allows extra
 cell properties, so this does not alter the frozen required fields.
 
+Until the full analysis endpoint lands, the local model can also be exercised through
+the isolated FastAPI route:
+
+```sh
+.venv/bin/uvicorn api.main:app --reload
+```
+
+`GET /api/popularity/status` reports whether the private runtime assets are mounted.
+`POST /api/popularity` accepts a `ConceptProfile` and one or more Pittsburgh H3 IDs.
+It is a development integration surface; Pittsburgh still has no Yelp outcome labels.
+
 ## Local artifacts
 
 The repository intentionally ignores `ml/artifacts/`. The Yelp Dataset Terms restrict sharing Data and related metrics with third parties and require Yelp review before a public presentation or publication involving the Data or Yelp brand. Do not commit, push, publish, or place the trained model, evaluation metrics, or derived demographic lookup in a submission package without resolving those terms.

@@ -37,6 +37,12 @@ fixture was enriched end to end; the full suite now reports 72 passed and 2 DB s
 and ruff is clean. The backend still has no `/api/analysis` implementation, so its final
 connection is one documented call when that endpoint lands.
 
+Added a small FastAPI application and `/api/popularity` development route so the model
+can be tested over HTTP before the scoring backend arrives. A live localhost smoke test
+returned 200 for health and for a real Korean-concept H3 prediction. The route returns
+503 when private artifacts are not mounted and labels every result as an unvalidated
+Pittsburgh experiment.
+
 ## Dev 1 (cylee)
 
 ### 2026-09-12 — Session 1

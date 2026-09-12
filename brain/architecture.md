@@ -32,6 +32,11 @@ was trained on accumulated Yelp review counts and has no Pittsburgh outcome labe
 Runtime model and demographic assets are mounted locally and are not part of the public
 repository or frozen response contract.
 
+During backend development, `POST /api/popularity` exposes the same optional signal for
+explicit H3 IDs. It is a local integration route rather than a replacement for
+`POST /api/analysis`; the final analysis path calls `enrich_cell_collection` before
+serializing its cells.
+
 **Provider adapter rule:** scoring code never imports Google/Foursquare/BestTime/Census directly. Each source has an adapter in `providers/` writing to a common schema, so sources can be swapped for licensing or cost reasons without touching `scoring/`.
 
 ## Repo Layout
