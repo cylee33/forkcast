@@ -1,5 +1,6 @@
 """OSM (Overpass) anchors, parking, shops, suppliers, main roads + PRT GTFS trips → per-cell access features."""
 import json
+import re
 import zipfile
 
 import h3
@@ -111,6 +112,17 @@ def pois_df(data: dict) -> pd.DataFrame:
     return common.points_to_h3(pd.DataFrame(rows))
 
 
+def load_manual(path) -> pd.DataFrame:
+    """Hand-listed suppliers (data/suppliers_manual.csv), each given a stable, unique manual:<slug> id."""
+    manual = common.points_to_h3(pd.read_csv(path))
+    slug = manual["name"].str.lower().apply(lambda s: re.sub(r"[^a-z0-9]+", "_", s).strip("_"))
+    manual["id"] = "manual:" + slug
+    manual["source"] = "manual"
+    manual["osm_id"] = -1
+    manual["kind"] = manual["supplier_type"]
+    return manual[["osm_id", "name", "kind", "lat", "lng", "h3", "id", "source"]]
+
+
 def roads_h3(data: dict) -> set:
     out = set()
     for el in data["elements"]:
@@ -169,14 +181,11 @@ def cell_metrics(pois: pd.DataFrame, cells: pd.DataFrame, roads_h3: set, gtfs_tr
 def main():
     args = common.cli(__doc__)
     pois = pois_df(overpass("pois"))
+    pois["source"] = "osm"
+    pois["id"] = "osm:" + pois.osm_id.astype(str)
     manual_path = common.ROOT / "data/suppliers_manual.csv"
     if manual_path.exists():
-        manual = common.points_to_h3(pd.read_csv(manual_path))
-        manual["id"] = "manual:" + manual.index.astype(str)
-        manual["source"] = "manual"
-        manual["osm_id"] = -1
-        manual["kind"] = manual["supplier_type"]
-        pois = pd.concat([pois, manual[["osm_id", "name", "kind", "lat", "lng", "h3"]]], ignore_index=True)
+        pois = pd.concat([pois, load_manual(manual_path)], ignore_index=True)
     else:
         print(f"note: {manual_path} not found, skipping manual suppliers")
     roads = roads_h3(overpass("roads"))
@@ -184,11 +193,9 @@ def main():
     cells = common.load_cells()
     if args.limit:
         cells = cells.head(args.limit)
-    common.save(pois, "osm_pois")
+    common.save(pois[["osm_id", "name", "kind", "lat", "lng", "h3"]], "osm_pois")
     common.save(cell_metrics(pois, cells, roads, trips), "osm_cells")
     sup = pois[pois.kind.isin(SUPPLIERS)].rename(columns={"kind": "supplier_type"})
-    sup["id"] = "osm:" + sup.osm_id.astype(str)
-    sup["source"] = "osm"
     common.save(sup[["id", "name", "supplier_type", "lat", "lng", "h3", "source"]], "suppliers")
     if not args.no_db:
         common.write_table(common.load("suppliers"), "suppliers")
