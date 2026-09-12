@@ -261,6 +261,7 @@
   .street-card:first-child .rank { background: var(--accent); }
   .street-card .nm { font-weight: 700; font-size: 13.5px; }
   .street-card .nick { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .street-card .model-signal { color: var(--good); font-weight: 700; }
   .street-card .grade { font-family: var(--serif); font-weight: 700; font-size: 19px; text-align: right; }
   .street-card .score { font-size: 10px; color: var(--sub); text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -386,7 +387,7 @@
     <button class="btn" onclick="replayLogo()">Replay</button>
   </div>
 
-  <div class="foot">DEMAND · COMPETITION · TRAFFIC · RENT — RANKED BY A SURVIVAL MODEL</div>
+  <div class="foot">DEMAND · COMPETITION · TRAFFIC · RENT — RANKED BY TRANSPARENT OPPORTUNITY SIGNALS</div>
 </section>
 
 <!-- ================= APP ================= -->
@@ -440,7 +441,7 @@
   <!-- left card: mode 2 (reverse) -->
   <div class="panel control" id="control2" style="display:none">
     <h3>What fits <b>here</b>? <span class="loc">reverse mode</span></h3>
-    <p class="reverse-hint" id="revHint">Click a building or corner on the map.<br/>We rank the restaurant concepts most likely to <b>survive at that exact spot</b> — and say why.</p>
+    <p class="reverse-hint" id="revHint">Click a building or corner on the map.<br/>We rank the restaurant concepts with the <b>strongest local fit</b> — and say why.</p>
     <div class="rev-result" id="revResult">
       <div class="rev-addr" id="revAddr">—</div>
       <div class="rev-sub" id="revSub">—</div>
@@ -467,7 +468,7 @@
     </header>
     <div class="metrics" id="whyMetrics"></div>
     <div class="storefronts" id="storefronts"></div>
-    <div class="note">Rankings are deterministic — the model narrates only numbers the engine computed. Storefront candidates are placeholders until the county-parcel join lands.</div>
+    <div class="note">Rankings use computed signals only. Historical popularity stays separate from the opportunity score. Storefront candidates are placeholders until the county-parcel join lands.</div>
   </div>
 
   <div class="panel legend">
@@ -476,7 +477,7 @@
     <div class="lr"><span>quiet</span><span>prime</span></div>
   </div>
 
-  <div class="panel disclaimer" id="disclaimer"><b>PROTOTYPE</b> · synthetic scores — model integration pending</div>
+  <div class="panel disclaimer" id="disclaimer"><b>PROTOTYPE</b> · waiting for analysis</div>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -509,6 +510,11 @@ function countUp(el, target, suffix = '', dur = 700) {
     if (p < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+}
+function ordinal(value) {
+  const n = Math.round(value), mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return n + 'th';
+  return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
 }
 
 /* ============ synthetic model (fallback outside fixture area) ============ */
@@ -638,6 +644,7 @@ let streetMarkers = [], sfMarkers = [];
 let revMarker = null;
 
 let FIXTURE = null, fixtureCentroid = null, mode = 'synthetic', weightsTouched = false;
+let popularityByH3 = new Map(), popularityState = 'idle', popularityFallback = [];
 fetch('/data/fixtures/recommend_sample.json')
   .then(r => (r.ok ? r.json() : null))
   .then(j => {
@@ -654,8 +661,46 @@ fetch('/data/fixtures/recommend_sample.json')
   })
   .catch(() => {});
 
+const CUISINE_RULES = [
+  ['korean', 'korean'], ['fried chicken', 'fried_chicken'], ['pizza', 'pizza'],
+  ['coffee', 'cafe'], ['cafe', 'cafe'], ['bakery', 'bakery'], ['ramen', 'japanese'],
+  ['sushi', 'japanese'], ['japanese', 'japanese'], ['chinese', 'chinese'],
+  ['thai', 'thai'], ['indian', 'indian'], ['italian', 'italian'],
+  ['mexican', 'mexican'], ['taco', 'mexican'], ['burger', 'american'],
+  ['steak', 'steakhouse'], ['seafood', 'seafood'], ['wine', 'wine_bar'],
+  ['bar', 'bar'], ['frozen yogurt', 'dessert_ice_cream'], ['dessert', 'dessert_ice_cream'],
+  ['bubble tea', 'bubble_tea'], ['brunch', 'breakfast_brunch'], ['vegan', 'vegan'],
+];
+function popularityProfile(concept) {
+  const lower = concept.toLowerCase();
+  const cuisines = [...new Set(CUISINE_RULES.filter(([needle]) => lower.includes(needle)).map(([, cuisine]) => cuisine))];
+  const premium = /(premium|fine dining|luxury|upscale|\$\$\$\$)/.test(lower);
+  const budget = /(cheap|budget|street food|under \$|\$\d+)/.test(lower);
+  return { cuisines: cuisines.length ? cuisines : ['unknown'], price_tier: premium ? 4 : budget ? 1 : 2 };
+}
+async function loadPopularity(concept, h3Ids) {
+  popularityByH3 = new Map(); popularityFallback = []; popularityState = 'loading';
+  try {
+    const response = await fetch('/api/popularity', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: popularityProfile(concept), h3_ids: [...new Set(h3Ids)] }),
+    });
+    if (!response.ok) throw new Error(`model endpoint ${response.status}`);
+    const result = await response.json();
+    result.cells.forEach(cell => popularityByH3.set(cell.h3, cell));
+    popularityFallback = result.unsupported_cuisines || [];
+    if (popularityProfile(concept).cuisines.includes('unknown')) popularityFallback.push('unknown');
+    popularityState = 'ready';
+  } catch (error) {
+    console.info('Historical popularity signal unavailable:', error);
+    popularityState = 'unavailable';
+  }
+}
+
 /* score sampler used for streets + reverse mode: fixture when close, synthetic otherwise */
 function sampleAt(lat, lng, concept) {
+  const id = h3.latLngToCell(lat, lng, 9);
+  const historical = popularityByH3.get(id) || null;
   if (FIXTURE && fixtureCentroid && km([lat, lng], fixtureCentroid) < 1.8) {
     let best = null, bd = 1e9;
     for (const pt of FIXTURE._pts) {
@@ -668,13 +713,12 @@ function sampleAt(lat, lng, concept) {
       return {
         real: true,
         comp: { D: p.D/100, C: p.C/100, T: p.T/100, S: p.S_spend/100, lat, lng, uniProx },
-        score: p.total/100,
+        score: p.total/100, h3: id, historical,
       };
     }
   }
-  const id = h3.latLngToCell(lat, lng, 9);
   const comp = cellComponents(id, concept);
-  return { real: false, comp, score: totalScore(comp, getWeights()) };
+  return { real: false, comp, score: totalScore(comp, getWeights()), h3: id, historical };
 }
 
 /* ============ mode toggle ============ */
@@ -748,7 +792,7 @@ function updateAnalyzeState() {
 /* ============ mode 1: analyze ============ */
 /* the board: a go-board square lattice (~170 m), each square scored like a move worth playing */
 const BOARD_STEP_M = 170;
-function analyze() {
+async function analyze() {
   const concept = conceptInput.value.trim();
   const radM = +document.getElementById('radius').value;
   weightsTouched = false;
@@ -764,7 +808,7 @@ function analyze() {
       if (km([lat, lng], center) * 1000 > radM) continue;
       const s = sampleAt(lat, lng, concept);
       board.push({
-        lat, lng, comp: s.comp, real: s.real,
+        lat, lng, comp: s.comp, real: s.real, h3: s.h3, historical: null,
         wave: Math.max(Math.abs(ix), Math.abs(iy)),
         poly: [
           [lng - lngStep/2*g, lat - latStep/2*g], [lng + lngStep/2*g, lat - latStep/2*g],
@@ -777,16 +821,27 @@ function analyze() {
   board.forEach(b => b.score = totalScore(b.comp, w));
   mode = board.some(b => b.real) ? 'fixture' : 'synthetic';
 
-  document.getElementById('disclaimer').innerHTML = mode === 'fixture'
-    ? '<b>REAL DATA</b> · Oakland feature-store fixture · ' + board.length + ' squares'
-    : '<b>PROTOTYPE</b> · synthetic scores — model integration pending';
-
   document.getElementById('cellCount').textContent = board.length;
   const sc = document.getElementById('scanning'); sc.style.display = 'block';
+  const button = document.getElementById('analyzeBtn'); button.disabled = true;
   document.getElementById('results').style.display = 'none';
   document.getElementById('why').style.display = 'none';
   clearStreetMarkers(); clearSfMarkers(); clearEvMarkers();
   selectedStreet = null; revealWave = -1; rankedStreets = []; render();
+
+  const modelH3 = board.map(cell => cell.h3);
+  STREETS.forEach(st => st.path.forEach(([lng, lat]) => modelH3.push(h3.latLngToCell(lat, lng, 9))));
+  await loadPopularity(concept, modelH3);
+  board.forEach(cell => { cell.historical = popularityByH3.get(cell.h3) || null; });
+  button.disabled = false;
+
+  const baseLabel = mode === 'fixture'
+    ? `<b>REAL DATA</b> · Oakland feature-store fixture · ${board.length} squares`
+    : `<b>PROTOTYPE</b> · synthetic opportunity scores · ${board.length} squares`;
+  const modelLabel = popularityState === 'ready'
+    ? ` · <b>ML ON</b> historical popularity${popularityFallback.length ? ' · unknown cuisine fallback' : ''} · Pittsburgh inference only`
+    : ' · historical popularity unavailable';
+  document.getElementById('disclaimer').innerHTML = baseLabel + modelLabel;
 
   setTimeout(() => {
     sc.style.display = 'none';
@@ -818,7 +873,13 @@ function rankStreets(concept, radM) {
     comp.lat = mid[1]; comp.lng = mid[0];
     const score = totalScore(comp, getWeights());
     const real = samples.some(x => x.real);
-    return { ...st, mid, distKm, score, comp, real };
+    const historical = samples.map(x => x.historical).filter(Boolean);
+    const historicalPopularityPct = historical.length
+      ? historical.reduce((sum, value) => sum + value.historical_popularity_pct, 0) / historical.length
+      : null;
+    const historicalWarnings = historical.filter(value =>
+      value.demographic_missing_count > 0 || value.outside_training_range_count > 0).length;
+    return { ...st, mid, distKm, score, comp, real, historicalPopularityPct, historicalWarnings };
   })
   .filter(st => st.distKm * 1000 <= radM + 700)
   .sort((a, b) => b.score - a.score)
@@ -849,7 +910,7 @@ function renderStreetList(concept) {
     el.className = 'street-card';
     el.innerHTML = `
       <div class="rank">${st.rank}</div>
-      <div><div class="nm">${st.name}</div><div class="nick">${st.hood} · ${nickname(st.comp)}</div></div>
+      <div><div class="nm">${st.name}</div><div class="nick">${st.hood} · ${nickname(st.comp)}${st.historicalPopularityPct === null ? '' : ` <span class="model-signal">· historical ${ordinal(st.historicalPopularityPct)} percentile</span>`}</div></div>
       <div><div class="grade">${grade(st.score)}</div><div class="score">${(st.score*100).toFixed(0)}/100</div></div>`;
     el.onmouseenter = () => { if (selectedStreet === null) { hoveredStreet = i; render(); } };
     el.onmouseleave = () => { if (selectedStreet === null) { hoveredStreet = null; render(); } };
@@ -907,7 +968,7 @@ const EV_KINDS = {
   parking:  { em: '🅿️', cls: '',    label: 'parking' },
   supplier: { em: '📦', cls: '',     label: 'supplier / warehouse' },
   resident: { em: '👥', cls: '',     label: 'residential density' },
-  yelp:     { em: '⭐', cls: 'good', label: 'review buzz' },
+  yelp:     { em: '⭐', cls: 'good', label: 'historical popularity signal' },
   night:    { em: '🍺', cls: '',     label: 'nightlife' },
 };
 let evMarkers = [];
@@ -999,7 +1060,7 @@ function openWhy(i) {
   document.getElementById('whyGrade').textContent = grade(st.score);
   document.getElementById('whyName').textContent = `#${st.rank} · ${st.name}`;
   document.getElementById('whyNick').textContent =
-    `${st.hood} · ${nickname(c)}` + (st.real && FIXTURE ? ` · model confidence ${Math.round((FIXTURE.zones?.[0]?.confidence ?? .6) * 100)}%` : '');
+    `${st.hood} · ${nickname(c)}` + (st.real && FIXTURE ? ` · data confidence ${Math.round((FIXTURE.zones?.[0]?.confidence ?? .6) * 100)}%` : '');
 
   const seed = hash01(st.name);
   const competitors = Math.max(0, Math.round((1 - c.C) * 6 + seed * 1.5 - .5));
@@ -1015,6 +1076,11 @@ function openWhy(i) {
     ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity', ['resident']],
     ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', ['supplier']],
   ];
+  if (st.historicalPopularityPct !== null) M.unshift([
+    'Historical popularity signal', ordinal(st.historicalPopularityPct) + ' percentile',
+    st.historicalPopularityPct,
+    'separate ML signal · Pittsburgh unvalidated' + (st.historicalWarnings ? ' · coverage warning' : ''), ['yelp'],
+  ]);
   const wrap = document.getElementById('whyMetrics');
   wrap.innerHTML = '';
   M.forEach(([label, val, pct, sub, kinds], j) => {
@@ -1231,7 +1297,7 @@ function render() {
     layers,
     getTooltip: ({ object, layer }) => {
       if (!object) return null;
-      if (layer.id === 'board') return { text: `square score ${(object.score * 100).toFixed(0)}` };
+      if (layer.id === 'board') return { text: `square score ${(object.score * 100).toFixed(0)}` + (object.historical ? ` · historical ${ordinal(object.historical.historical_popularity_pct)} percentile` : '') };
       if (layer.id === 'streets') return { text: `${object.name} · ${grade(object.score)} (${(object.score * 100).toFixed(0)})` };
       return null;
     },
