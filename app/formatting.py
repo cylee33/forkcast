@@ -29,20 +29,19 @@ SUBSCORE_LABELS: dict[str, str] = {
 # since the response contract carries no per-cell provenance flag for it.
 PROXY_SUBSCORES = {"T"}
 
-# 5-stop sequential palette (Poor -> Excellent). Blue-grey rising through teal and gold to
-# amber - reads on both a light and a dark map basemap and avoids a red/green "stoplight"
-# read that would misleadingly imply pass/fail.
+# Sequential ramp for the opportunity grid, read on a dark basemap: deep blue at the
+# bottom rising through teal to amber at the top. Two hues, one direction, so the ramp
+# reads as "colder -> hotter" and never as a red/green pass-fail.
 SCORE_COLOR_STOPS: list[tuple[float, tuple[int, int, int]]] = [
-    (0, (70, 90, 120)),
-    (25, (60, 130, 150)),
-    (50, (95, 165, 120)),
-    (75, (210, 170, 60)),
-    (100, (225, 120, 55)),
+    (0, (30, 58, 95)),
+    (35, (33, 118, 150)),
+    (60, (46, 196, 182)),
+    (85, (255, 209, 102)),
+    (100, (255, 171, 64)),
 ]
 
-# Translucent neutral grey: visually distinct from any point on the score ramp above,
-# including its low end, so "no data" never reads as "low score".
-NULL_COLOR: tuple[int, int, int, int] = (130, 130, 138, 60)
+# Flat slate grey, off the ramp entirely: "no data" must never read as "low score".
+NULL_COLOR: tuple[int, int, int, int] = (58, 65, 80, 110)
 
 
 def format_score(value: float | None, decimals: int = 0) -> str:
@@ -176,3 +175,37 @@ def traffic_provenance_note() -> str:
     currently derived from a proxy (anchors, transit, workers, POI density), not
     measured foot traffic."""
     return "Traffic is derived from a proxy signal (anchors, transit, workers), not measured foot traffic."
+
+
+# Rectangular tiles. H3 res-9 cells are hexagons, but the map draws each cell as a
+# rectangle centred on the cell so the grid reads as a pixel raster. Hex centres sit
+# ~302 m apart within a row and rows are ~262 m apart, so 290 x 250 m tiles leave a
+# hairline gap and never stack.
+TILE_W_M = 290.0
+TILE_H_M = 250.0
+
+
+def rect_polygon(lat: float, lng: float, w_m: float = TILE_W_M, h_m: float = TILE_H_M) -> list[list[float]]:
+    """Closed [lng, lat] ring for a w x h metre rectangle centred on (lat, lng)."""
+    import math
+
+    dlat = (h_m / 2) / 111_320.0
+    dlng = (w_m / 2) / (111_320.0 * math.cos(math.radians(lat)))
+    return [
+        [lng - dlng, lat - dlat],
+        [lng + dlng, lat - dlat],
+        [lng + dlng, lat + dlat],
+        [lng - dlng, lat + dlat],
+        [lng - dlng, lat - dlat],
+    ]
+
+
+def build_grid_records(cells_geojson: dict[str, Any], metric_key: str = "total") -> list[dict[str, Any]]:
+    """`build_hex_records` plus a `polygon` ring per cell for `pydeck.PolygonLayer`."""
+    import h3
+
+    records = build_hex_records(cells_geojson, metric_key)
+    for record in records:
+        lat, lng = h3.cell_to_latlng(record["h3"])
+        record["polygon"] = rect_polygon(lat, lng)
+    return records
