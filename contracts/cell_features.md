@@ -1,8 +1,20 @@
 # cell_features columns
 
 Stored as `cell_features.features` JSONB and as `data/processed/cell_features.parquet` (one column each).
-Every numeric column `X` also has `X_pct` (metro-wide percentile, 0–100). Sources/resolutions live in the
-`source` / `resolution` JSONB maps keyed by column name.
+Every numeric column `X` also has `X_pct` (metro-wide percentile, 0–100), **except** the `dist_to_*_km`
+columns, whose `_pct` is inverted (100 − raw percentile): a higher `dist_to_*_pct` means *closer*, not
+farther — e.g. `dist_to_university_km` near its max (~15 km) percentiles near 0, and near its min
+(~0.04 km) percentiles near 100. Do not re-invert it when treating distance as a cost.
+
+`source` and `resolution` are static, column-level methodology labels (e.g. `est_rent_psf_yr` always
+asserts `zori_manual_regression`), not per-row provenance — they describe the intended pipeline, not what
+actually produced a given row. For rent and traffic, the per-row columns are authoritative instead:
+`rent_source`, `rent_resolution`, `rent_confidence`, and `traffic_source` (all row-level, and any of the
+rent columns may be NULL where no rent part was joined).
+
+`cell_features.parquet` has no `updated_at` column; that column exists only on the DB `cell_features` table.
+
+Sources/resolutions live in the `source` / `resolution` JSONB maps keyed by column name.
 
 | Column | Unit | Source | Resolution |
 |---|---|---|---|
