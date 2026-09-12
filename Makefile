@@ -14,9 +14,9 @@ db-down:
 
 ingest:
 ifdef STEP
-	$(PY) ingest/$(STEP)*.py $(ARGS)
+	PYTHONPATH=. $(PY) ingest/$(STEP)*.py $(ARGS)
 else
-	for s in $(STEPS); do $(PY) ingest/$$s.py $(ARGS) || exit 1; done
+	for s in $(STEPS); do PYTHONPATH=. $(PY) ingest/$$s.py $(ARGS) || exit 1; done
 endif
 
 sanity:
