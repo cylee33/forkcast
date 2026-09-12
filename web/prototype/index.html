@@ -1064,7 +1064,9 @@ async function geminiCall(body) {
       } else return null;
       if (!r.ok) continue;
       const j = await r.json();
-      return j.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+      const parts = j.candidates?.[0]?.content?.parts || [];
+      const text = parts.filter(p => p.text && !p.thought).map(p => p.text).join('').trim();
+      return text || null;   // skip "thought" parts — gemini-3.6 is a thinking model
     } catch { /* try next model */ }
   }
   return null;
@@ -1101,8 +1103,8 @@ DIFFERENTIATE STRONGLY — do not return a flat split. Examples:
 - "first specialty bagel shop in town" -> C high (whitespace play), e.g. {D:30,C:40,T:20,S:10}
 
 Concept: "${text}"` }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
-  }), 4500);
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+  }), 9000);
   try { return JSON.parse(out); } catch { return null; }
 }
 
@@ -1141,9 +1143,9 @@ async function geminiNarrateWhy(st, metrics) {
   if (!GEMINI_KEY && !GEMINI_PROXY) return null;
   return withTimeout(geminiCall({
     contents: [{ parts: [{ text:
-      `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write two crisp sentences on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate.\n\n${JSON.stringify(metrics)}` }] }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 120 },
-  }), 5000);
+      `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write exactly two crisp sentences of plain prose on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate, no JSON, no quotes, no markdown.\n\n${JSON.stringify(metrics)}` }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 400, thinkingConfig: { thinkingBudget: 0 } },
+  }), 9000);
 }
 
 /* ============ mode 1: analyze ============ */
