@@ -23,6 +23,13 @@ Center + radius ──► Candidate H3 cells (precomputed feature store)
                  Map (hex heatmap + layer toggles) + ranked list + Why-Here + Compare
 ```
 
+An optional `ml.popularity.score_profile(profile, h3_ids)` adapter can provide a
+separately labeled historical online-popularity percentile for candidate H3 cells.
+It is deliberately outside the seven-subscore weighted Opportunity Score: the model
+was trained on accumulated Yelp review counts and has no Pittsburgh outcome labels.
+Runtime model and demographic assets are mounted locally and are not part of the public
+repository or frozen response contract.
+
 **Provider adapter rule:** scoring code never imports Google/Foursquare/BestTime/Census directly. Each source has an adapter in `providers/` writing to a common schema, so sources can be swapped for licensing or cost reasons without touching `scoring/`.
 
 ## Repo Layout

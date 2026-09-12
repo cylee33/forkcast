@@ -3,6 +3,29 @@
 Each developer appends to their own section only, so the file does not
 conflict on merge.
 
+## Codex ML integration
+
+### 2026-09-12 — local branch from updated main
+
+Created `codex/yelp-model-integration` at `f72f19c` in a separate worktree, preserving
+the original experiment checkout. Added `ml.popularity.score_profile` as an optional,
+contract-neutral backend integration point. The portable model uses the exact ACS 2021
+tract definitions from training and broadcasts them to all 18,275 Pittsburgh H3 centers.
+It returns a Pittsburgh-wide fixed percentile plus missing/out-of-training-range flags;
+it does not alter `D/C/T/A/S_spend/K/Sup` or `total`.
+
+The trained model, H3 demographic lookup, and evaluation metadata remain ignored local
+artifacts under `ml/artifacts/` because the Yelp Dataset Terms restrict third-party and
+public release. Source code, a reproducible local asset builder, and artifact-aware tests
+are ready to commit locally. With local artifacts present, 70 tests pass and 2 DB tests
+skip; ruff is clean. A clean public checkout skips only four local-artifact integration
+tests. Cold full-county scoring measured about 1.34 seconds; a warm 500-cell request about
+0.01 seconds on this host.
+
+**Pick up here next:** once the backend scoring endpoint exists, call `score_profile`
+with its candidate H3 IDs and expose the result only as a separately labeled historical
+popularity signal. Do not push model/results publicly without resolving Yelp review terms.
+
 ## Dev 1 (cylee)
 
 ### 2026-09-12 — Session 1
