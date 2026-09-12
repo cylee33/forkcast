@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecommendResponse",
+  "type": "object",
+  "required": ["analysis_id","profile","weights","cells","zones","backtest_rho"],
+  "$defs": {
+    "subscores": {"type":"object","required":["D","C","T","A","S_spend","K","Sup"],
+                  "additionalProperties":{"type":["number","null"]}},
+    "competitor": {"type":"object","required":["id","name","distance_m","similarity","rating","reviews"],
+                   "properties":{"id":{"type":"string"},"name":{"type":"string"},"distance_m":{"type":"number"},
+                                 "similarity":{"type":"number"},"rating":{"type":["number","null"]},"reviews":{"type":["integer","null"]}}},
+    "anchor": {"type":"object","required":["name","type","distance_m"],
+               "properties":{"name":{"type":"string"},"type":{"type":"string"},"distance_m":{"type":"number"}}},
+    "zone": {"type":"object",
+      "required":["zone_id","name","total","best_h3","subscores","confidence","drivers","risks","gap","gap_flag",
+                  "competitors_direct","competitors_indirect","anchors","est_rent_psf_yr","rent_confidence"],
+      "properties":{
+        "zone_id":{"type":"integer"},"name":{"type":"string"},"total":{"type":"number"},"best_h3":{"type":"string"},
+        "subscores":{"$ref":"#/$defs/subscores"},"confidence":{"type":"number"},
+        "drivers":{"type":"array","items":{"type":"string"},"maxItems":3},
+        "risks":{"type":"array","items":{"type":"string"},"maxItems":2},
+        "gap":{"type":"object","required":["demand","supply","gap"],"additionalProperties":{"type":"number"}},
+        "gap_flag":{"type":"boolean"},
+        "competitors_direct":{"type":"array","items":{"$ref":"#/$defs/competitor"},"maxItems":5},
+        "competitors_indirect":{"type":"array","items":{"$ref":"#/$defs/competitor"},"maxItems":5},
+        "anchors":{"type":"array","items":{"$ref":"#/$defs/anchor"},"maxItems":5},
+        "est_rent_psf_yr":{"type":["number","null"]},"rent_confidence":{"type":["number","null"]}
+      }}
+  },
+  "properties": {
+    "analysis_id":{"type":"string"},
+    "profile":{"type":"object"},
+    "weights":{"$ref":"#/$defs/subscores"},
+    "cells":{"type":"object","required":["type","features"],
+             "properties":{"type":{"const":"FeatureCollection"},
+                           "features":{"type":"array","items":{"type":"object","required":["type","geometry","properties"],
+                             "properties":{"properties":{"type":"object",
+                               "required":["h3","total","D","C","T","A","S_spend","K","Sup","confidence","zone_id"]}}}}}},
+    "zones":{"type":"array","items":{"$ref":"#/$defs/zone"}},
+    "backtest_rho":{"type":["number","null"]}
+  }
+}
