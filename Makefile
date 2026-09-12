@@ -4,7 +4,7 @@ PY := .venv/bin/python
 .PHONY: venv db-up db-down ingest test lint fixtures sanity restore-data
 
 venv:
-	python3 -m venv .venv && $(PY) -m pip install -r requirements.txt
+	uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r requirements.txt
 
 db-up:
 	docker compose up -d db
