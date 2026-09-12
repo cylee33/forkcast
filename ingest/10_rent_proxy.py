@@ -51,13 +51,31 @@ def predict(coef: np.ndarray, feats: pd.DataFrame) -> pd.Series:
     return pd.Series(X @ coef, index=feats.index)
 
 
-def confidence_and_source(r2: float, imputed: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """Per-cell rent_confidence/rent_source: cells whose ZIP had no real ZORI match (silently
-    imputed to the county median) are marked less confident and distinguishable from real matches,
-    so the Cost sub-score doesn't weigh an imputed cell the same as one backed by a real ZIP."""
+def support_weight(train_feats: pd.DataFrame, feats: pd.DataFrame) -> pd.Series:
+    """Per-cell confidence multiplier from standardized-Euclidean distance to the training rows'
+    centroid in (zori, walkable_poi_density_pct) space (standardized on the training set, not the
+    county -- standardized rather than Mahalanobis since a 2x2 covariance from as few as 8 training
+    rows is too fragile to invert responsibly). Cells inside the envelope the training points
+    actually spanned (distance <= the farthest training row) keep full weight; cells further out
+    decay toward half weight, never to zero."""
+    mu = train_feats[FEATS].mean()
+    sd = train_feats[FEATS].std(ddof=0).replace(0, 1.0)  # guard a feature that's constant in training
+    d_train = np.sqrt((((train_feats[FEATS] - mu) / sd) ** 2).sum(axis=1))
+    d_ref = d_train.max() or 1.0  # guard an all-identical (zero-radius) training set
+    d_all = np.sqrt((((feats[FEATS] - mu) / sd) ** 2).sum(axis=1))
+    return pd.Series(np.clip(1 - 0.5 * np.maximum(0.0, d_all / d_ref - 1), 0.5, 1.0), index=feats.index)
+
+
+def confidence_and_source(r2: float, imputed: pd.Series, support: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Per-cell rent_confidence/rent_source. Two things lower a cell's confidence below the
+    R2-driven ceiling: its ZIP having no real ZORI match (silently imputed to the county median),
+    and its own features sitting outside the envelope the training rows actually spanned -- so the
+    Cost sub-score doesn't weigh a cell the regression never really covered the same as one near
+    the training data."""
     matched_conf = float(np.clip(0.3 + 0.5 * r2, 0.3, 0.8))
     imputed_conf = float(np.clip(matched_conf - IMPUTED_CONFIDENCE_PENALTY, IMPUTED_CONFIDENCE_FLOOR, matched_conf))
-    confidence = imputed.map({True: imputed_conf, False: matched_conf}).astype(float)
+    base = imputed.map({True: imputed_conf, False: matched_conf}).astype(float)
+    confidence = (base * support).clip(IMPUTED_CONFIDENCE_FLOOR, 0.8)
     source = imputed.map({True: "zori_imputed+manual_regression", False: "zori+manual_regression"})
     return confidence, source
 
@@ -89,8 +107,9 @@ def main():
         f"the h3 join (dropped {len(manual) - len(mf)}); need at least {MIN_MANUAL_ROWS} to fit."
     )
     coef, r2 = fit(mf, mf)
+    support = support_weight(mf, feats)
     out = pd.DataFrame({"h3": feats.h3, "est_rent_psf_yr": predict(coef, feats).clip(8, 80).values})
-    out["rent_confidence"], out["rent_source"] = confidence_and_source(r2, feats.zori_imputed)
+    out["rent_confidence"], out["rent_source"] = confidence_and_source(r2, feats.zori_imputed, support)
     out["rent_resolution"] = "zip"
     common.save(out, "rent")
     n_imputed = int(feats.zori_imputed.sum())
