@@ -10,6 +10,8 @@ ZORI_URL = "https://files.zillowstatic.com/research/public_csvs/zori/Zip_zori_uc
 ZCTA_URL = "https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_zcta520_500k.zip"
 FEATS = ["zori", "walkable_poi_density_pct"]
 MIN_MANUAL_ROWS = 8
+IMPUTED_CONFIDENCE_PENALTY = 0.2  # cells whose ZIP had no ZORI match are less trustworthy than the fit alone implies
+IMPUTED_CONFIDENCE_FLOOR = 0.15
 
 
 def zori_by_zip() -> pd.DataFrame:
@@ -49,6 +51,17 @@ def predict(coef: np.ndarray, feats: pd.DataFrame) -> pd.Series:
     return pd.Series(X @ coef, index=feats.index)
 
 
+def confidence_and_source(r2: float, imputed: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Per-cell rent_confidence/rent_source: cells whose ZIP had no real ZORI match (silently
+    imputed to the county median) are marked less confident and distinguishable from real matches,
+    so the Cost sub-score doesn't weigh an imputed cell the same as one backed by a real ZIP."""
+    matched_conf = float(np.clip(0.3 + 0.5 * r2, 0.3, 0.8))
+    imputed_conf = float(np.clip(matched_conf - IMPUTED_CONFIDENCE_PENALTY, IMPUTED_CONFIDENCE_FLOOR, matched_conf))
+    confidence = imputed.map({True: imputed_conf, False: matched_conf}).astype(float)
+    source = imputed.map({True: "zori_imputed+manual_regression", False: "zori+manual_regression"})
+    return confidence, source
+
+
 def main():
     args = common.cli(__doc__)
     manual_path = common.ROOT / "data/rents_manual.csv"
@@ -66,17 +79,23 @@ def main():
     feats = pd.DataFrame({"h3": cells.h3.values})
     feats["zip"] = zip_per_cell(cells).reindex(cells.h3).values
     feats = feats.merge(zori_by_zip(), on="zip", how="left")
+    feats["zori_imputed"] = feats.zori.isna()
     feats["zori"] = feats.zori.fillna(feats.zori.median())
     feats["walkable_poi_density_pct"] = common.pct(osm.walkable_poi_density.fillna(0)).values
     manual = common.points_to_h3(manual_raw)
     mf = manual.merge(feats, on="h3", how="inner")
+    assert len(mf) >= MIN_MANUAL_ROWS, (
+        f"only {len(mf)} of {len(manual)} hand-collected rows fell inside the cell grid after "
+        f"the h3 join (dropped {len(manual) - len(mf)}); need at least {MIN_MANUAL_ROWS} to fit."
+    )
     coef, r2 = fit(mf, mf)
     out = pd.DataFrame({"h3": feats.h3, "est_rent_psf_yr": predict(coef, feats).clip(8, 80).values})
-    out["rent_confidence"] = float(np.clip(0.3 + 0.5 * r2, 0.3, 0.8))
-    out["rent_source"] = "zori+manual_regression"
+    out["rent_confidence"], out["rent_source"] = confidence_and_source(r2, feats.zori_imputed)
     out["rent_resolution"] = "zip"
     common.save(out, "rent")
-    print(f"rent: n_manual={len(mf)} r2={r2:.2f} median est ${out.est_rent_psf_yr.median():.0f}/sqft/yr")
+    n_imputed = int(feats.zori_imputed.sum())
+    print(f"rent: n_manual={len(mf)} r2={r2:.2f} n_zori_imputed={n_imputed}/{len(feats)} "
+          f"median est ${out.est_rent_psf_yr.median():.0f}/sqft/yr")
 
 
 if __name__ == "__main__":
