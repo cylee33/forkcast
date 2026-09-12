@@ -20,7 +20,7 @@
 | D9 | Model: §5.10 option 0 (hand-weighted, LLM-proposed weights validated by backend). Option 1 (learned weights) only if hours 10–13 are free. |
 | D10 | Demo runs from a laptop via `docker-compose`. Vercel/Render deploy is stretch. |
 | D11 | Local Postgres (PostGIS + pgvector image) in compose. Not Supabase. |
-| D12 | LLM: `claude-sonnet-5` for parse, refine, explain, compare. Embeddings: Voyage `voyage-3`. Recorded in `analyses.model_json`. |
+| D12 | LLM: `gemini-3.8-flash` for parse, refine, explain, compare. Embeddings: `gemini-embedding-001` at `output_dimensionality=1024`, `task_type=SEMANTIC_SIMILARITY`. One provider, one `GEMINI_API_KEY`. Recorded in `analyses.model_json`. |
 | D13 | Git repo is created and pushed as **task 1** of foundation. Commit after every completed task. |
 
 ---
@@ -72,7 +72,7 @@ Every `ingest/NN_*.py` is idempotent: reads `data/raw/`, writes `data/processed/
 | `05_google_places` | Google Places Nearby Search + Details, field-masked | County-wide grid of requests, cached raw JSON, matched to WPRDC rows by name + distance. Adds `rating, reviews, price_level, business_status`. Never per-hex calls. |
 | `06_foursquare` | Foursquare Places | **Skipped** unless sanity heatmap shows thin anchor coverage. |
 | `07_besttime` | BestTime forecasts | Top ~500 POIs by review count. Proxy elsewhere (anchors + transit + workers + POI density). `traffic_source = real | proxy` per cell. |
-| `08_place_embeddings` | Voyage `voyage-3` | `name + categories + editorial summary` → pgvector(1024). |
+| `08_place_embeddings` | Gemini `gemini-embedding-001` | `name + categories + editorial summary` → pgvector(1024), via `output_dimensionality=1024`. |
 | `09_spend_capacity` | BLS CEX × ACS income brackets, Google `price_level` | `spending_capacity`, `local_price_profile{1..4}`. |
 | `10_rent_proxy` | Zillow ZORI (ZIP), assessor land value, `data/raw/rents_manual.csv` (20–50 hand-collected asking rents) | Regression → `est_rent_psf_yr`, `rent_confidence`, `rent_source`, `rent_resolution`. Always labeled estimate. |
 | `11_cuisine_affinity` | Derived from `places` | Proposal §3.4 observed affinity only. |
@@ -88,9 +88,9 @@ FastAPI, single process. On startup, load `cell_features`, `places`, and embeddi
 - **`scoring/*.py`**: one pure function per sub-score, `(features_df, profile, params) -> np.ndarray` in 0–100. Formulas as proposal §5.2–5.4.
 - **`scoring/weights.py`**: proposal §5.5 defaults by service format. Validate LLM `proposed_weights`: assert 0 ≤ w ≤ 1, clamp any single weight ≤ 0.4, renormalize. Final weights stored in `analyses.weights_json`.
 - **`services/zones.py`**: top-decile cells → H3 connected components → rank by max cell → neighborhood name via Nominatim reverse geocode (cached in DB).
-- **`services/concept_parser.py`**: `claude-sonnet-5` with tool-use whose input schema is `ConceptProfile`. One retry on Pydantic failure. Cache by normalized text in `concept_cache` table. Three golden tests on the demo concepts.
+- **`services/concept_parser.py`**: `gemini-3.8-flash` with structured output — `response_mime_type="application/json"` and `response_schema=ConceptProfile` (the google-genai SDK accepts the Pydantic model directly). One retry on Pydantic failure. Cache by normalized text in `concept_cache` table. Three golden tests on the demo concepts.
 - **`services/refine.py`**: same model. Input profile + instruction → patched profile. Return the field diff for the UI.
-- **`services/explainer.py`**: `claude-sonnet-5`. Receives only computed sub-scores, named competitors, anchors, rent estimate. Prompt forbids new numbers. Called lazily on zone click.
+- **`services/explainer.py`**: `gemini-3.8-flash`. Receives only computed sub-scores, named competitors, anchors, rent estimate. Prompt forbids new numbers. Called lazily on zone click.
 - **Reverse mode**: `concept_archetypes.yaml` (~100 rows). Build a profile per archetype, score cells within 1 km of the pin, rank by total with `+15 if gap_flag`, return top 8 with sub-scores.
 - **Backtest**: `api/backtest.py` (`make backtest`). For every open place with ≥ 30 reviews, build profile from cuisine + price level, score its own cell, Spearman ρ vs `log(reviews)`. Writes ρ and N to `backtest_results`. Never cut.
 - **Persistence**: `analyses` + `analysis_cells` per run for shareable URLs.

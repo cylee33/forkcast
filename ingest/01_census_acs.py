@@ -11,6 +11,10 @@ from ingest import common
 YEAR = 2023
 BG_SHP_URL = f"https://www2.census.gov/geo/tiger/TIGER{YEAR}/BG/tl_{YEAR}_42_bg.zip"
 
+JAM_VALUE_MAX = -222222222  # Census ACS jam values (e.g. -666666666: "estimate not available") are
+# large negative sentinels, distinct from any real count/dollar/person value; anything at or below
+# the smallest defined jam value (-222222222) is a sentinel, not data.
+
 AGE_M = {"18_24": ["007", "008", "009", "010"], "25_34": ["011", "012"],
          "35_54": ["013", "014", "015", "016"], "55p": [f"{i:03d}" for i in range(17, 26)]}
 AGE_F = {k: [f"{int(v) + 24:03d}" for v in vs] for k, vs in AGE_M.items()}
@@ -25,22 +29,51 @@ VARS = ["B01003_001E", "B11001_001E", "B19013_001E", "B19001_001E", "B01001_001E
 VARS += [f"B19001_{s}E" for ss in INCOME.values() for s in ss]
 VARS += [f"B01001_{s}E" for ss in list(AGE_M.values()) + list(AGE_F.values()) for s in ss]
 
+GEO_COLS = ["state", "county", "tract", "block group"]
+MAX_VARS_PER_REQUEST = 50  # Census API caps `get=` at 50 variables
+
+
+def _chunks(vars_list: list[str], size: int = MAX_VARS_PER_REQUEST) -> list[list[str]]:
+    return [vars_list[i:i + size] for i in range(0, len(vars_list), size)]
+
+
+def _merge_chunks(chunks: list[list[list[str]]]) -> list[list[str]]:
+    """Merge Census API list-of-lists responses (header row + data rows) on geography
+    columns, without duplicating or suffixing those columns."""
+    merged = None
+    for rows in chunks:
+        d = pd.DataFrame(rows[1:], columns=rows[0])
+        if merged is None:
+            merged = d
+        else:
+            value_cols = [c for c in d.columns if c not in GEO_COLS]
+            before = len(merged)
+            merged = merged.merge(d[GEO_COLS + value_cols], on=GEO_COLS, how="inner")
+            assert len(merged) == before, (
+                f"_merge_chunks: inner join dropped rows ({before} -> {len(merged)}); "
+                "a short chunk would otherwise silently drop block groups into the cache")
+    return [list(merged.columns)] + merged.values.tolist()
+
 
 def fetch() -> pd.DataFrame:
     path = common.RAW / "acs/bg_2023.json"
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        url = (f"https://api.census.gov/data/{YEAR}/acs/acs5?get={','.join(VARS)}"
-               f"&for=block%20group:*&in=state:{common.STATE_FIPS}%20county:{common.COUNTY_FIPS}")
         key = os.environ.get("CENSUS_API_KEY")
-        if key:
-            url += f"&key={key}"
-        path.write_text(json.dumps(requests.get(url, timeout=120).json()))
+        chunks = []
+        for vars_chunk in _chunks(VARS):
+            url = (f"https://api.census.gov/data/{YEAR}/acs/acs5?get={','.join(vars_chunk)}"
+                   f"&for=block%20group:*&in=state:{common.STATE_FIPS}%20county:{common.COUNTY_FIPS}")
+            if key:
+                url += f"&key={key}"
+            chunks.append(requests.get(url, timeout=120).json())
+        path.write_text(json.dumps(_merge_chunks(chunks)))
     rows = json.loads(path.read_text())
     df = pd.DataFrame(rows[1:], columns=rows[0])
     df["GEOID"] = df["state"] + df["county"] + df["tract"] + df["block group"]
     for v in VARS:
-        df[v] = pd.to_numeric(df[v], errors="coerce").clip(lower=0)
+        n = pd.to_numeric(df[v], errors="coerce")
+        df[v] = n.mask(n <= JAM_VALUE_MAX).clip(lower=0)
     return df
 
 

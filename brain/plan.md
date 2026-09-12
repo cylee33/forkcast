@@ -19,7 +19,7 @@ This plan is derived from the design spec (`docs/superpowers/specs/2026-09-12-fo
 | D9 | Model: §5.10 option 0 (hand-weighted, LLM-proposed weights validated by backend). Option 1 (learned weights) only if hours 10–13 are free. |
 | D10 | Demo runs from a laptop via `docker-compose`. Vercel/Render deploy is stretch. |
 | D11 | Local Postgres (PostGIS + pgvector image) in compose. Not Supabase. |
-| D12 | LLM: `claude-sonnet-5` for parse, refine, explain, compare. Embeddings: Voyage `voyage-3`. Recorded in `analyses.model_json`. |
+| D12 | LLM: `gemini-3.8-flash` for parse, refine, explain, compare. Embeddings: `gemini-embedding-001` at `output_dimensionality=1024`, `task_type=SEMANTIC_SIMILARITY`. One provider, one `GEMINI_API_KEY`. Recorded in `analyses.model_json`. |
 | D13 | Git repo is created and pushed as **task 1** of foundation. Commit after every completed task. |
 | D14 | Toolchain: `uv` provides Python 3.11 (`make venv`), because the pinned wheels do not build on newer interpreters. Colima or Docker Desktop both work as the container runtime. |
 | D15 | The county grid holds 18,275 H3 res-9 cells, not the ~7,000 the proposal estimated. Anything sized against the old number needs revisiting. |

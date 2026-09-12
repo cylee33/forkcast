@@ -13,4 +13,4 @@
 | is_open | WPRDC status open AND Google businessStatus != CLOSED_PERMANENTLY |
 | source | `wprdc+google`, `wprdc`, `google` |
 | summary | Google editorialSummary text |
-| embedding | vector(1024), voyage-3 on `name. categories. summary` |
+| embedding | vector(1024), gemini-embedding-001 (output_dimensionality 1024) on `name. categories. summary` |

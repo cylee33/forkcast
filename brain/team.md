@@ -34,13 +34,14 @@ and the web app runs off `data/fixtures/recommend_sample.json`.
 ## Blockers
 | Date | Who | Blocker | Status |
 |---|---|---|---|
-| 2026-09-12 | Dev 1 | No `CENSUS_API_KEY`. The Census API refuses keyless requests, so `01_census_acs.py` cannot produce `acs.parquet`. Tasks 12 and 15 consume it. | Open — key requested |
-| 2026-09-12 | Dev 1 | No `WPRDC_FOOD_RESOURCE_ID`. Needed before Task 7 can pull the food-facility list. | Open |
-| 2026-09-12 | Dev 1 | `GOOGLE_PLACES_API_KEY`, `BESTTIME_API_KEY_PRIVATE`, `VOYAGE_API_KEY` not provisioned. They block Tasks 9, 10 and 11; Task 10 still runs its proxy path without a key. | Open |
+| 2026-09-12 | Dev 1 | No `CENSUS_API_KEY`. The Census API refuses keyless requests, so `01_census_acs.py` cannot produce `acs.parquet`. Tasks 12 and 15 consume it. | Resolved — key set in `.env` |
+| 2026-09-12 | Dev 1 | No `WPRDC_FOOD_RESOURCE_ID`. Needed before Task 7 can pull the food-facility list. | Resolved — `112a3821-334d-4f3f-ab40-4de1220b1a0a` |
+| 2026-09-12 | Dev 1 | `BESTTIME_API_KEY_PRIVATE` and `GEMINI_API_KEY` not provisioned. They block Tasks 10 and 11; Task 10 still runs its proxy path without a key. `GOOGLE_PLACES_API_KEY` and `CENSUS_API_KEY` are now set. | Open |
 
 ## Contract change log
 | Date | Who | File | Change |
 |---|---|---|---|
+| 2026-09-12 | Dev 1 | `contracts/places.md` | `embedding` is now `gemini-embedding-001` at `output_dimensionality=1024` instead of Voyage `voyage-3`. **The column stays `vector(1024)`, so no schema migration and no code change for Dev 2 or Dev 3.** Only the model that fills it changed. Vectors are L2-normalized by the ingest script, because Gemini returns normalized vectors only at its native 3072 dims. |
 
 ## Data handoff
 
