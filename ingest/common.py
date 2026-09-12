@@ -90,7 +90,11 @@ def disk_sum(s: pd.Series, k: int) -> pd.Series:
 
 
 def pct(s: pd.Series) -> pd.Series:
-    return s.rank(pct=True, method="average") * 100.0
+    """Percentile rank in [0, 100]. Uses method="min" (competition ranking) rather than
+    "average" so a block of cells tied at the floor -- e.g. 97% of cells with zero signal
+    for a rare cuisine or anchor type -- lands near 0 (rank 1 of N), not at the block's
+    midpoint (~50). Ties still receive equal values; the max still lands at/near 100."""
+    return s.rank(pct=True, method="min") * 100.0
 
 
 def cli(description: str) -> argparse.Namespace:

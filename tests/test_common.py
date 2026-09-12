@@ -12,6 +12,20 @@ def test_pct_ranks_0_to_100():
     assert p.iloc[-1] > p.iloc[0]
 
 
+def test_pct_tied_floor_block_lands_near_zero_not_midscale():
+    # Realistic shape: most cells tied at zero (no signal), a handful with distinct real values.
+    n_zero = 970
+    s = pd.Series([0.0] * n_zero + list(range(1, 31)))
+    p = common.pct(s)
+    # under method="average" this tied floor block would land near 48.5 (the defect);
+    # it must instead land near the bottom of the scale.
+    assert p[s == 0.0].iloc[0] < 1.0
+    # ties still receive equal values
+    assert p[s == 0.0].nunique() == 1
+    # the (unique) max still maps to exactly 100
+    assert p.max() == 100.0
+
+
 def test_points_to_h3_adds_res9_cell():
     df = pd.DataFrame({"lat": [40.4406], "lng": [-79.9959]})
     out = common.points_to_h3(df)
