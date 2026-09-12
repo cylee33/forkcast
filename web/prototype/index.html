@@ -331,24 +331,42 @@
   }
   .center-pin-el { width: 30px; filter: drop-shadow(0 6px 14px rgba(28,25,19,.3)); }
 
-  /* evidence pins — monopoly-go cascade */
-  .ev-marker {
-    display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 10px; font-size: 15px;
-    background: var(--surface); border: 1.5px solid var(--line);
-    box-shadow: 0 5px 14px rgba(31,27,22,.22);
+  /* POI chips — Phosphor fill glyph on tinted squircle (Apple/Naver map grammar) */
+  .poi {
+    display: grid; place-items: center;
+    width: 27px; height: 27px; border-radius: 9px;
+    background: var(--tint, var(--ink));
+    border: 1.5px solid var(--surface);
+    box-shadow: 0 1px 2px rgba(31,27,22,.2), 0 4px 10px rgba(31,27,22,.14);
     animation: evDrop .55s var(--spring) both;
     transition: transform .2s var(--spring), opacity .2s ease;
   }
-  .ev-marker.warn { background: #FBE9E4; border-color: #E0B4A6; }
-  .ev-marker.good { background: #E9F0EA; border-color: #BFD3C4; }
-  .ev-marker.dim { opacity: .28; }
-  .ev-marker.hot { transform: scale(1.35); z-index: 5; box-shadow: 0 8px 20px rgba(31,27,22,.3); }
+  .poi svg { width: 15px; height: 15px; fill: var(--surface); display: block; }
+  .poi.fallback { font-size: 14px; }
   @keyframes evDrop {
     0% { transform: translateY(-90px) scale(.4); opacity: 0; }
     60% { transform: translateY(4px) scale(1.08); opacity: 1; }
     80% { transform: translateY(-2px) scale(.97); }
     100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  /* reason focus mode */
+  .metric { cursor: pointer; border-radius: 10px; padding: 6px 8px; margin: 0 -8px 7px; }
+  .metric:hover { background: var(--bg); }
+  .metric .row .lb::after { content: " ›"; color: var(--accent); font-weight: 700; }
+  .metric.noview { cursor: default; }
+  .metric.noview:hover { background: none; }
+  .metric.noview .row .lb::after { content: ""; }
+  .focus-chip {
+    top: 74px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 12px; padding: 10px 12px 10px 18px;
+    max-width: 520px;
+  }
+  .focus-chip .fc-name { font-family: var(--serif); font-weight: 700; font-size: 14.5px; white-space: nowrap; }
+  .focus-chip .fc-claim { font-size: 12px; color: var(--sub); }
+  .focus-chip button {
+    border: none; background: var(--surface-2); color: var(--ink); cursor: pointer;
+    width: 26px; height: 26px; border-radius: 50%; font-size: 13px; font-weight: 700;
   }
 
   .maplibregl-ctrl-attrib { background: rgba(246,241,231,.7) !important; }
@@ -447,6 +465,12 @@
       <div class="rev-sub" id="revSub">—</div>
       <div id="fitList"></div>
     </div>
+  </div>
+
+  <!-- reason focus chip -->
+  <div class="panel focus-chip" id="focusChip">
+    <div><div class="fc-name" id="fcName">—</div><div class="fc-claim" id="fcClaim">—</div></div>
+    <button onclick="exitFocus()">✕</button>
   </div>
 
   <!-- right: ranked streets -->
@@ -620,6 +644,16 @@ function initMap() {
   });
   overlay = new deck.MapboxOverlay({ interleaved: false, layers: [] });
   map.addControl(overlay);
+  // ink scrim under deck layers — dims the basemap in reason-focus mode
+  map.on('load', () => {
+    try {
+      map.addSource('scrim', { type: 'geojson', data: { type: 'Feature', properties: {},
+        geometry: { type: 'Polygon', coordinates: [[[-180,-85],[180,-85],[180,85],[-180,85],[-180,-85]]] } } });
+      map.addLayer({ id: 'scrim-fill', type: 'fill', source: 'scrim',
+        paint: { 'fill-color': '#1F1B16', 'fill-opacity': 0,
+                 'fill-opacity-transition': { duration: 300 } } });
+    } catch {}
+  });
 
   map.on('click', onMapClick);
   map.on('load', () => {
@@ -736,6 +770,7 @@ function sampleAt(lat, lng, concept) {
 
 /* ============ mode toggle ============ */
 function setMode(m) {
+  exitFocus();
   uiMode = m;
   document.getElementById('modeBtn1').classList.toggle('on', m === 1);
   document.getElementById('modeBtn2').classList.toggle('on', m === 2);
@@ -991,17 +1026,25 @@ function clearSfMarkers() { sfMarkers.forEach(m => m.remove()); sfMarkers = []; 
 
 /* evidence pins: each pin = one reason on the ground, cascading along the street */
 const EV_KINDS = {
-  comp:     { em: '🍜', cls: 'warn', label: 'direct competitor' },
-  icomp:    { em: '🍔', cls: 'warn', label: 'indirect competitor' },
-  uni:      { em: '🎓', cls: 'good', label: 'university anchor' },
-  office:   { em: '🏢', cls: '',     label: 'daytime workers' },
-  transit:  { em: '🚌', cls: '',     label: 'transit stop' },
-  parking:  { em: '🅿️', cls: '',    label: 'parking' },
-  supplier: { em: '📦', cls: '',     label: 'supplier / warehouse' },
-  resident: { em: '👥', cls: '',     label: 'residential density' },
-  yelp:     { em: '⭐', cls: 'good', label: 'historical popularity signal' },
-  night:    { em: '🍺', cls: '',     label: 'nightlife' },
+  comp:     { icon: 'fork-knife',      tint: '#9C3B24', em: '🍜', label: 'direct competitor' },
+  icomp:    { icon: 'hamburger',       tint: '#B0603F', em: '🍔', label: 'indirect competitor' },
+  uni:      { icon: 'graduation-cap',  tint: '#3F5573', em: '🎓', label: 'university anchor' },
+  office:   { icon: 'buildings',       tint: '#574A3A', em: '🏢', label: 'daytime workers' },
+  transit:  { icon: 'bus',             tint: '#2F6B6B', em: '🚌', label: 'transit stop' },
+  parking:  { icon: 'letter-circle-p', tint: '#5A719B', em: '🅿️', label: 'parking' },
+  supplier: { icon: 'package',         tint: '#77713B', em: '📦', label: 'supplier / warehouse' },
+  resident: { icon: 'users',           tint: '#6E8253', em: '👥', label: 'residential density' },
+  yelp:     { icon: 'star',            tint: '#B08428', em: '⭐', label: 'historical popularity signal' },
+  night:    { icon: 'beer-stein',      tint: '#6E4468', em: '🍺', label: 'nightlife' },
 };
+/* Phosphor Fill glyphs (MIT) — preloaded once, inlined into chips */
+const ICON_SVG = {};
+Object.entries(EV_KINDS).forEach(([k, v]) => {
+  fetch(`https://cdn.jsdelivr.net/npm/@phosphor-icons/core@2.1.1/assets/fill/${v.icon}-fill.svg`)
+    .then(r => (r.ok ? r.text() : null))
+    .then(t => { if (t) ICON_SVG[k] = t; })
+    .catch(() => {});
+});
 let evMarkers = [];
 function clearEvMarkers() { evMarkers.forEach(m => m.marker.remove()); evMarkers = []; }
 
@@ -1048,9 +1091,17 @@ function dropEvidence(list) {
   clearEvMarkers();
   list.forEach((e, idx) => {
     const k = EV_KINDS[e.kind];
-    const { marker, el } = animatedMarker(
-      'ev-marker' + (k.cls ? ' ' + k.cls : ''), k.em, .35 + idx * .07, [e.lng, e.lat]);
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.className = 'poi';
+    el.style.setProperty('--tint', k.tint);
+    if (ICON_SVG[e.kind]) el.innerHTML = ICON_SVG[e.kind];
+    else { el.classList.add('fallback'); el.textContent = k.em; }
     el.title = k.label;
+    el.style.animationDelay = `${.25 + idx * .07}s`;
+    wrap.appendChild(el);
+    const marker = new maplibregl.Marker({ element: wrap, anchor: 'center' })
+      .setLngLat([e.lng, e.lat]).addTo(map);
     evMarkers.push({ kind: e.kind, el, marker });
   });
 }
@@ -1100,35 +1151,33 @@ function openWhy(i) {
   const spend = Math.round(2300 + c.S * 1900 + seed * 200);
   const M = [
     ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100,
-      competitors <= 1 ? 'whitespace for this concept' : 'crowded field', ['comp', 'icomp']],
-    ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted', ['transit', 'office', 'night', 'parking']],
-    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', ['resident', 'yelp']],
-    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity', ['uni']],
-    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity', ['resident']],
-    ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', ['supplier']],
+      competitors <= 1 ? 'whitespace for this concept' : 'crowded field', 'comp'],
+    ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted', 'traffic'],
+    ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', 'demand'],
+    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity', 'students'],
+    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity', 'spend'],
+    ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', 'supply'],
   ];
   if (st.historicalPopularityPct !== null) M.unshift([
     'Historical popularity signal', ordinal(st.historicalPopularityPct) + ' percentile',
     st.historicalPopularityPct,
-    'separate ML signal · Pittsburgh unvalidated' + (st.historicalWarnings ? ' · coverage warning' : ''), ['yelp'],
+    'separate ML signal · Pittsburgh unvalidated' + (st.historicalWarnings ? ' · coverage warning' : ''), null,
   ]);
   const wrap = document.getElementById('whyMetrics');
   wrap.innerHTML = '';
-  M.forEach(([label, val, pct, sub, kinds], j) => {
+  M.forEach(([label, val, pct, sub, key], j) => {
     const m = document.createElement('div');
-    m.className = 'metric';
+    m.className = 'metric' + (key ? '' : ' noview');
     m.innerHTML = `
       <div class="row"><span class="lb">${label} <span>· ${sub}</span></span><span class="v">${val}</span></div>
       <div class="track"><div class="fill"></div></div>`;
-    m.onmouseenter = () => spotlightEvidence(kinds);
-    m.onmouseleave = () => spotlightEvidence(null);
+    if (key) m.onclick = () => enterFocus(key);
     wrap.appendChild(m);
     setTimeout(() => {
       m.classList.add('in');
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
   });
-  dropEvidence(evidenceFor(st));  // monopoly-go cascade: the reasons land along the street
 
   // storefront candidates
   const sfs = storefrontsFor(st);
@@ -1151,7 +1200,9 @@ function openWhy(i) {
   render();
 }
 function closeWhy() {
+  exitFocus();
   selectedStreet = null; clearSfMarkers(); clearEvMarkers();
+  dropStreetMarkers();
   document.getElementById('why').style.display = 'none';
   document.getElementById('results').style.display = 'flex';
   map.flyTo({ center: [center[1], center[0]], zoom: 13.2, duration: 1100 });
@@ -1245,9 +1296,197 @@ function reverseAt(lat, lng) {
   map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14.6), duration: 900 });
 }
 
+/* ============ reason focus mode — one variable repaints the map ============ */
+let focusVar = null, focusT0 = 0, focusT = 0, focusRaf = null;
+const FOCUS_META = {
+  comp:     { name: 'Direct competition',  claim: '300 m catchments around each rival — overlaps darken' },
+  traffic:  { name: 'Foot traffic',        claim: 'pedestrian pulses along the corridor, daypart-weighted' },
+  demand:   { name: 'Demand',              claim: 'gravity catchment — blocks colored by local demand' },
+  students: { name: 'Student share',       claim: 'each dot ≈ 25 students · tether shows campus pull' },
+  spend:    { name: 'Dining spend',        claim: 'blocks rise by household dining budget' },
+  supply:   { name: 'Supply chain',        claim: 'wholesale routes in from the Strip District' },
+};
+function enterFocus(key) {
+  if (selectedStreet === null || !FOCUS_META[key]) return;
+  const st = rankedStreets[selectedStreet];
+  focusVar = key; focusT0 = performance.now(); focusT = 0;
+  document.getElementById('why').style.display = 'none';
+  const chip = document.getElementById('focusChip');
+  chip.style.display = 'flex';
+  document.getElementById('fcName').textContent = FOCUS_META[key].name;
+  document.getElementById('fcClaim').textContent = `${st.name} · ${FOCUS_META[key].claim}`;
+  try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0.28); } catch {}
+  const KINDS_BY_VAR = {
+    comp: ['comp', 'icomp'], traffic: ['transit', 'parking', 'night'],
+    demand: ['resident', 'yelp'], students: ['uni'], spend: [], supply: ['supplier'],
+  };
+  dropEvidence(evidenceFor(st).filter(e => KINDS_BY_VAR[key].includes(e.kind)));
+  clearSfMarkers(); clearStreetMarkers();
+  const lats = st.path.map(p => p[1]), lngs = st.path.map(p => p[0]);
+  const pad = key === 'supply' ? 0.02 : 0.006;
+  map.fitBounds(
+    [[Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]],
+    { padding: { left: 320, right: 80, top: 100, bottom: 60 }, duration: 800 });
+  setTimeout(() => { if (focusVar === 'spend') map.easeTo({ pitch: 50, duration: 600 }); }, 850);
+  if (focusRaf) cancelAnimationFrame(focusRaf);
+  const loop = () => {
+    if (!focusVar) return;
+    focusT = (performance.now() - focusT0) / 1000;
+    render();
+    focusRaf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function exitFocus() {
+  if (!focusVar) return;
+  focusVar = null;
+  if (focusRaf) { cancelAnimationFrame(focusRaf); focusRaf = null; }
+  clearEvMarkers();
+  try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0); } catch {}
+  if (map.getPitch() > 0) map.easeTo({ pitch: 0, duration: 400 });
+  document.getElementById('focusChip').style.display = 'none';
+  if (selectedStreet !== null) { openWhy(selectedStreet); return; }
+  render();
+}
+
+function trafficTrips(st) {
+  const paths = [st, ...rankedStreets.filter(s => s !== st).slice(0, 2)];
+  const out = [];
+  for (const s of paths) {
+    const dense = [];
+    for (let k = 0; k < s.path.length - 1; k++) {
+      const a = s.path[k], b = s.path[k + 1];
+      for (let j = 0; j < 8; j++) dense.push([a[0] + (b[0] - a[0]) * j / 8, a[1] + (b[1] - a[1]) * j / 8]);
+    }
+    dense.push(s.path[s.path.length - 1]);
+    const ts = dense.map((_, j) => j * (90 / dense.length));
+    out.push({ path: dense, ts });
+    out.push({ path: [...dense].reverse(), ts });
+  }
+  return out;
+}
+function studentDots() {
+  const dots = [];
+  UNIS.forEach((u, ui) => {
+    for (let i = 0; i < 34; i++) {
+      const h1 = hash01('sd' + ui + i), h2 = hash01('sd2' + ui + i);
+      const ang = h1 * Math.PI * 2, r = 0.0012 + h2 * 0.004;
+      dots.push({ pos: [u[1] + Math.cos(ang) * r, u[0] + Math.sin(ang) * r * 0.75], delay: 0.2 + h1 * 1.2 });
+    }
+  });
+  return dots;
+}
+function focusLayers(st) {
+  const t = focusT, ease = x => Math.min(1, Math.max(0, x));
+  const tick = Math.floor(t * 30);
+  const L = [];
+  if (focusVar === 'comp') {
+    const rivals = evidenceFor(st).filter(e => e.kind === 'comp' || e.kind === 'icomp');
+    L.push(new deck.ScatterplotLayer({
+      id: 'focus-comp', data: rivals,
+      getPosition: d => [d.lng, d.lat],
+      getRadius: 300, radiusUnits: 'meters',
+      radiusScale: ease(t / 0.9) * (1 + 0.03 * Math.sin(t * 2)),
+      stroked: true, filled: true,
+      getFillColor: [156, 59, 36, 30], getLineColor: [156, 59, 36, 190], lineWidthMinPixels: 1.5,
+      updateTriggers: { getRadius: [tick] },
+    }));
+  }
+  if (focusVar === 'traffic') {
+    const trips = trafficTrips(st);
+    L.push(new deck.HeatmapLayer({
+      id: 'focus-heat', data: trips.flatMap(p => p.path.map(q => ({ p: q }))),
+      getPosition: d => d.p, getWeight: 1, radiusPixels: 45,
+      colorRange: [[247,242,233,0],[227,185,138,120],[205,138,86,170],[184,91,35,220],[143,61,20,255],[111,59,31,255]],
+      opacity: ease(t / 0.8) * 0.6,
+    }));
+    L.push(new deck.TripsLayer({
+      id: 'focus-trips', data: trips,
+      getPath: d => d.path, getTimestamps: d => d.ts,
+      getColor: [184, 91, 35, 255], getWidth: 4, widthUnits: 'pixels',
+      capRounded: true, jointRounded: true,
+      trailLength: 22, currentTime: (t * 18) % 90,
+    }));
+  }
+  if (focusVar === 'demand') {
+    const w = Math.floor(t / 0.09);
+    L.push(new deck.PolygonLayer({
+      id: 'focus-demand', data: board,
+      getPolygon: d => d.poly,
+      stroked: true, getLineColor: [247, 242, 233, 255], getLineWidth: 2, lineWidthUnits: 'pixels',
+      getFillColor: d => {
+        const v = d.comp.D;
+        const a = d.wave <= w ? Math.round(60 + v * 180) : 0;
+        return [63 + (1 - v) * 150, 85 + (1 - v) * 130, 115 + (1 - v) * 100, a];
+      },
+      updateTriggers: { getFillColor: [w] },
+      transitions: { getFillColor: 250 },
+    }));
+  }
+  if (focusVar === 'students') {
+    L.push(new deck.LineLayer({
+      id: 'focus-tether', data: UNIS.map(u => ({ s: [u[1], u[0]], d: st.mid })),
+      getSourcePosition: d => d.s, getTargetPosition: d => d.d,
+      getColor: [63, 85, 115, 160],
+      getWidth: 2 + Math.sin(t * 3) * 0.8, widthUnits: 'pixels',
+      updateTriggers: { getWidth: [tick] },
+    }));
+    L.push(new deck.ScatterplotLayer({
+      id: 'focus-students', data: studentDots(),
+      getPosition: d => d.pos, radiusUnits: 'meters',
+      getRadius: d => 14 * ease((t - d.delay) / 0.5),
+      getFillColor: [63, 85, 115, 200],
+      updateTriggers: { getRadius: [tick] },
+    }));
+  }
+  if (focusVar === 'spend') {
+    L.push(new deck.ColumnLayer({
+      id: 'focus-spend', data: board,
+      getPosition: d => [d.lng, d.lat], diskResolution: 6, radius: 42, extruded: true,
+      getElevation: d => (d.comp.S * 420) * ease((t - d.wave * 0.05) / 1.1),
+      getFillColor: d => d.comp.S > 0.75 ? [176, 132, 40, 235] : [122, 92, 60, 200],
+      updateTriggers: { getElevation: [tick] },
+    }));
+  }
+  if (focusVar === 'supply') {
+    const srcs = [[-79.9750, 40.4520], [-79.9660, 40.4585]];
+    L.push(new deck.ArcLayer({
+      id: 'focus-arcs', data: srcs.map(s => ({ s, d: st.mid })),
+      getSourcePosition: d => d.s, getTargetPosition: d => d.d,
+      getSourceColor: [119, 113, 59, 220], getTargetColor: [184, 91, 35, 220],
+      getWidth: 2.5, getHeight: 0.35, opacity: ease(t / 0.8),
+    }));
+    L.push(new deck.ScatterplotLayer({
+      id: 'focus-pulse', data: srcs.map((s, i) => ({ s, i })),
+      getPosition: d => {
+        const k = (t * 0.35 + d.i * 0.5) % 1;
+        return [d.s[0] + (st.mid[0] - d.s[0]) * k, d.s[1] + (st.mid[1] - d.s[1]) * k];
+      },
+      getRadius: 34, radiusUnits: 'meters', getFillColor: [184, 91, 35, 230],
+      updateTriggers: { getPosition: [tick] },
+    }));
+  }
+  return L;
+}
+
 /* ============ deck render ============ */
 function render() {
   if (!overlay) return;
+  if (focusVar !== null && selectedStreet !== null) {
+    const st = rankedStreets[selectedStreet];
+    overlay.setProps({
+      layers: [
+        new deck.PathLayer({
+          id: 'focus-street', data: [st],
+          getPath: d => d.path, getColor: [27, 100, 218, 250],
+          getWidth: 8, widthUnits: 'pixels', capRounded: true, jointRounded: true,
+        }),
+        ...focusLayers(st),
+      ],
+      getTooltip: () => null,
+    });
+    return;
+  }
   const layers = [];
 
   // the board (mode 1, after analyze): go-board squares, quiet squares cut out entirely
