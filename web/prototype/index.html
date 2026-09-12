@@ -194,6 +194,16 @@
     transition: all .18s var(--spring);
   }
   .chips button:hover { color: var(--ink); border-color: var(--ink); transform: translateY(-1px); }
+  .gemini-chips span {
+    font: 600 11.5px var(--sans); color: var(--accent-deep); background: var(--accent-soft);
+    border: 1px solid rgba(158,69,34,.25); border-radius: 999px; padding: 5px 11px;
+    animation: rise .4s var(--spring) both;
+  }
+  .gem-note {
+    margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2);
+    font: italic 500 12.5px var(--serif); line-height: 1.55; color: var(--ink);
+  }
+  .gem-note b { font: 700 10px var(--sans); letter-spacing: .1em; color: var(--accent-deep); display: block; margin-bottom: 4px; font-style: normal; }
   .hint { font-size: 11.5px; color: var(--sub); line-height: 1.5; }
   .hint.pin-set { color: var(--accent-deep); font-weight: 600; }
   input[type="range"] { width: 100%; accent-color: var(--ink); }
@@ -431,6 +441,7 @@
         <button onclick="setConcept('Korean fried chicken')">🍗 K-fried chicken</button>
         <button onclick="setConcept('Third-wave coffee bar')">☕ Coffee bar</button>
       </div>
+      <div class="chips gemini-chips" id="geminiChips" style="display:none"></div>
     </div>
 
     <div class="step" id="step2">
@@ -598,8 +609,8 @@ function rampColor(t) {
   }
 })();
 
-/* ============ streets (hand-digitized demo geometries; swap for OSM extract) ============ */
-const STREETS = [
+/* ============ streets — real OSM centerlines (make_data.py), hand-drawn fallback ============ */
+const HAND_STREETS = [
   { name: 'S Craig Street',  hood: 'Oakland',       range: [280, 480],  path: [[-79.9492,40.4432],[-79.9490,40.4452],[-79.9488,40.4472],[-79.9487,40.4486]] },
   { name: 'Forbes Avenue',   hood: 'Oakland',       range: [3600, 4000],path: [[-79.9622,40.4413],[-79.9575,40.4416],[-79.9532,40.4424],[-79.9494,40.4436]] },
   { name: 'Walnut Street',   hood: 'Shadyside',     range: [5400, 5880],path: [[-79.9378,40.4510],[-79.9340,40.4514],[-79.9302,40.4517]] },
@@ -609,6 +620,61 @@ const STREETS = [
   { name: 'Penn Avenue',     hood: 'Strip District',range: [2000, 2900],path: [[-79.9802,40.4498],[-79.9752,40.4517],[-79.9702,40.4534]] },
   { name: 'Liberty Avenue',  hood: 'Bloomfield',    range: [4400, 4800],path: [[-79.9522,40.4610],[-79.9480,40.4622],[-79.9440,40.4632]] },
 ];
+let STREETS = HAND_STREETS;
+fetch('/web/prototype/streets_real.geojson')
+  .then(r => (r.ok ? r.json() : null))
+  .then(j => {
+    if (!j || !j.features || !j.features.length) return;
+    const byName = new Map(HAND_STREETS.map(s => [s.name, s]));
+    STREETS = j.features.map(f => ({
+      name: f.properties.name, hood: f.properties.hood, range: f.properties.range,
+      path: f.geometry.coordinates,
+    }));
+    // keep hand-drawn corridors that the OSM pull missed
+    for (const s of HAND_STREETS) if (!STREETS.some(x => x.name === s.name)) STREETS.push(s);
+  })
+  .catch(() => {});
+
+/* real open food places (places.parquet extract) + real cell demographics */
+let COMPETITORS = [], CELLPOINTS = [];
+fetch('/web/prototype/competitors.json')
+  .then(r => (r.ok ? r.json() : [])).then(j => { COMPETITORS = j || []; }).catch(() => {});
+fetch('/web/prototype/cellmeta.json')
+  .then(r => (r.ok ? r.json() : null))
+  .then(j => {
+    if (!j) return;
+    CELLPOINTS = Object.entries(j).map(([id, m]) => {
+      const [lat, lng] = h3.cellToLatLng(id);
+      return { lat, lng, ...m };
+    });
+  })
+  .catch(() => {});
+
+function conceptCuisines(concept) {
+  try { return popularityProfile(concept).cuisines.filter(c => c !== 'unknown'); } catch { return []; }
+}
+function distToPathKm(lat, lng, path) {
+  let best = 1e9;
+  for (const [plng, plat] of path) best = Math.min(best, km([lat, lng], [plat, plng]));
+  return best;
+}
+function realRivals(st, concept) {
+  const cuisines = conceptCuisines(concept);
+  const near = COMPETITORS
+    .map(p => ({ ...p, d: distToPathKm(p.lat, p.lng, st.path) }))
+    .filter(p => p.d < 0.35);
+  const direct = near.filter(p => cuisines.includes(p.cuisine_key));
+  const indirect = near.filter(p => !cuisines.includes(p.cuisine_key))
+    .sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).slice(0, Math.max(0, 12 - direct.length));
+  return { direct, indirect, all: [...direct, ...indirect] };
+}
+function streetMeta(st) {
+  if (!CELLPOINTS.length) return null;
+  const near = CELLPOINTS.filter(c => distToPathKm(c.lat, c.lng, st.path) < 0.3);
+  if (!near.length) return null;
+  const avg = k => { const v = near.map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  return { students: avg('students'), spend: avg('spend'), restaurants: avg('restaurants'), n: near.length };
+}
 
 /* ============ map ============ */
 const CENTER0 = [-79.9530, 40.4440];
@@ -810,6 +876,11 @@ function placeCenterPin() {
 }
 function onMapClick(e) {
   if (e.originalEvent.target.closest('.rank-marker,.sf-marker')) return;
+  if (focusVar) {   // skip-on-tap: first tap fast-forwards the entrance, next tap exits
+    if (focusT < 2.2) focusT0 = performance.now() - 6000;
+    else exitFocus();
+    return;
+  }
   if (uiMode === 1) {
     center = [e.lngLat.lat, e.lngLat.lng];
     placeCenterPin();
@@ -837,13 +908,94 @@ function updateAnalyzeState() {
   document.getElementById('analyzeBtn').disabled = !(center && conceptInput.value.trim().length > 2);
 }
 
+/* ============ Gemini — parses concepts and narrates numbers; NEVER ranks ============ */
+let GEMINI_KEY = null;
+fetch('/.env').then(r => (r.ok ? r.text() : ''))
+  .then(t => {
+    const m = [...t.matchAll(/^GEMINI_API_KEY=(.+)$/gm)].map(x => x[1].trim()).filter(Boolean).pop();
+    if (m) GEMINI_KEY = m;
+  }).catch(() => {});
+const withTimeout = (p, ms) => Promise.race([p, new Promise(res => setTimeout(() => res(null), ms))]);
+
+async function geminiCall(body) {
+  for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      return j.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    } catch { /* try next model */ }
+  }
+  return null;
+}
+
+async function geminiParseConcept(text) {
+  if (!GEMINI_KEY || text.length < 18) return null;   // short keywords need no parsing
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      concept_name: { type: 'STRING', description: 'short canonical concept, e.g. "neapolitan pizzeria"' },
+      cuisines: { type: 'ARRAY', items: { type: 'STRING' } },
+      price_tier: { type: 'INTEGER', description: '1 cheap .. 4 fine dining' },
+      dayparts: { type: 'ARRAY', items: { type: 'STRING' } },
+      keywords: { type: 'ARRAY', items: { type: 'STRING' } },
+      weight_hint: { type: 'OBJECT', properties: {
+        D: { type: 'INTEGER' }, C: { type: 'INTEGER' }, T: { type: 'INTEGER' }, S: { type: 'INTEGER' } } },
+    },
+    required: ['concept_name', 'cuisines', 'price_tier', 'keywords'],
+  };
+  const out = await withTimeout(geminiCall({
+    contents: [{ parts: [{ text:
+      `Parse this restaurant concept into structured attributes. weight_hint = suggested importance (0-100, sum 100) of Demand, Competition-gap, foot Traffic, Spending-capacity for scoring locations for this concept.\n\nConcept: "${text}"` }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: schema, temperature: 0.2 },
+  }), 4000);
+  try { return JSON.parse(out); } catch { return null; }
+}
+
+function applyGeminiParse(gp) {
+  const wrap = document.getElementById('geminiChips');
+  const bits = [
+    ...(gp.cuisines || []).map(c => '🍽 ' + c),
+    gp.price_tier ? '$'.repeat(Math.min(4, Math.max(1, gp.price_tier))) : null,
+    ...(gp.dayparts || []).slice(0, 2),
+    ...(gp.keywords || []).slice(0, 3),
+  ].filter(Boolean);
+  wrap.innerHTML = '<span>✦ Gemini parsed</span>' + bits.map((b, i) =>
+    `<span style="animation-delay:${.06 * (i + 1)}s">${b}</span>`).join('');
+  wrap.style.display = 'flex';
+  const w = gp.weight_hint;
+  if (w && [w.D, w.C, w.T, w.S].every(v => Number.isFinite(v) && v >= 0)) {
+    const sum = w.D + w.C + w.T + w.S || 1;   // engine validates + renormalizes the LLM's proposal
+    const norm = k => Math.min(60, Math.max(5, Math.round(w[k] / sum * 100)));
+    ['D', 'C', 'T', 'S'].forEach(k => {
+      document.getElementById('w' + k).value = norm(k);
+      document.getElementById('w' + k + 'v').textContent = norm(k);
+    });
+  }
+}
+
+async function geminiNarrateWhy(st, metrics) {
+  if (!GEMINI_KEY) return null;
+  return withTimeout(geminiCall({
+    contents: [{ parts: [{ text:
+      `You narrate restaurant site analyses. Using ONLY these computed numbers (never invent any), write two crisp sentences on why ${st.name} (${st.hood}, Pittsburgh) earned grade ${grade(st.score)} for "${conceptInput.value.trim()}". No hedging boilerplate.\n\n${JSON.stringify(metrics)}` }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 120 },
+  }), 5000);
+}
+
 /* ============ mode 1: analyze ============ */
 /* the board: a go-board square lattice (~170 m), each square scored like a move worth playing */
 const BOARD_STEP_M = 170;
 async function analyze() {
-  const concept = conceptInput.value.trim();
+  let concept = conceptInput.value.trim();
   const radM = +document.getElementById('radius').value;
   weightsTouched = false;
+  document.getElementById('geminiChips').style.display = 'none';
+  const sc0 = document.getElementById('scanning'); sc0.style.display = 'block';
+  const gp = await geminiParseConcept(concept);
+  if (gp) { applyGeminiParse(gp); concept = gp.concept_name || concept; }
 
   const latStep = BOARD_STEP_M / 111320;
   const lngStep = BOARD_STEP_M / (111320 * Math.cos(center[0] * Math.PI / 180));
@@ -1145,17 +1297,25 @@ function openWhy(i) {
     `${st.hood} · ${nickname(c)}` + (st.real && FIXTURE ? ` · data confidence ${Math.round((FIXTURE.zones?.[0]?.confidence ?? .6) * 100)}%` : '');
 
   const seed = hash01(st.name);
-  const competitors = Math.max(0, Math.round((1 - c.C) * 6 + seed * 1.5 - .5));
+  const concept = conceptInput.value.trim();
+  // real numbers where the pipeline has them; labeled synthetic elsewhere
+  const rv = COMPETITORS.length ? realRivals(st, concept) : null;
+  const meta = streetMeta(st);
+  const competitors = rv ? rv.direct.length : Math.max(0, Math.round((1 - c.C) * 6 + seed * 1.5 - .5));
+  const compSub = rv
+    ? (competitors === 0 ? 'no direct rival on record (Google/WPRDC)' : `counted from ${rv.all.length} nearby places (Google/WPRDC)`)
+    : (competitors <= 1 ? 'whitespace for this concept' : 'crowded field');
   const foot = Math.round(45 + c.T * 52);
-  const students = Math.round(c.uniProx * 42 + seed * 5);
-  const spend = Math.round(2300 + c.S * 1900 + seed * 200);
+  const students = meta && meta.students != null ? Math.round(meta.students) : Math.round(c.uniProx * 42 + seed * 5);
+  const studentsSub = meta && meta.students != null ? `ACS enrollment · ${meta.n} blocks` : 'proximity proxy · synthetic';
+  const spend = meta && meta.spend != null ? Math.round(meta.spend) : Math.round(2300 + c.S * 1900 + seed * 200);
+  const spendSub = meta && meta.spend != null ? 'CEX × ACS food-away-from-home' : 'synthetic estimate';
   const M = [
-    ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100,
-      competitors <= 1 ? 'whitespace for this concept' : 'crowded field', 'comp'],
+    ['Direct competitors on street', competitors === 0 ? 'none' : competitors, (1 - competitors / 7) * 100, compSub, 'comp'],
     ['Foot-traffic index', foot + ' / 100', foot, 'daypart-weighted', 'traffic'],
     ['Demand', Math.round(c.D * 100) + ' / 100', c.D * 100, 'gravity catchment', 'demand'],
-    ['Student share', students + '%', students * 2.2, 'CMU + Pitt proximity', 'students'],
-    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, 'spending capacity', 'spend'],
+    ['Student share', students + '%', students * 2.2, studentsSub, 'students'],
+    ['Dining spend / household', '$' + spend.toLocaleString() + '/yr', (spend - 2200) / 22, spendSub, 'spend'],
     ['Supply chain', Math.round(40 + c.S * 40) + ' / 100', 40 + c.S * 40, 'wholesale distance', 'supply'],
   ];
   if (st.historicalPopularityPct !== null) M.unshift([
@@ -1177,6 +1337,14 @@ function openWhy(i) {
       m.classList.add('in');
       m.querySelector('.fill').style.width = Math.max(4, Math.min(100, pct)) + '%';
     }, 180 + j * 120);
+  });
+  // Gemini narrates the computed numbers (never invents, never ranks)
+  geminiNarrateWhy(st, Object.fromEntries(M.map(([l, v]) => [l, v]))).then(txt => {
+    if (!txt || selectedStreet !== i) return;
+    const note = document.createElement('div');
+    note.className = 'gem-note';
+    note.innerHTML = `<b>✦ GEMINI · NARRATING COMPUTED NUMBERS ONLY</b>${txt}`;
+    wrap.prepend(note);
   });
 
   // storefront candidates
@@ -1297,7 +1465,7 @@ function reverseAt(lat, lng) {
 }
 
 /* ============ reason focus mode — one variable repaints the map ============ */
-let focusVar = null, focusT0 = 0, focusT = 0, focusRaf = null;
+let focusVar = null, focusT0 = 0, focusT = 0, focusRaf = null, focusCache = null;
 const FOCUS_META = {
   comp:     { name: 'Direct competition',  claim: '300 m catchments around each rival — overlaps darken' },
   traffic:  { name: 'Foot traffic',        claim: 'pedestrian pulses along the corridor, daypart-weighted' },
@@ -1310,6 +1478,16 @@ function enterFocus(key) {
   if (selectedStreet === null || !FOCUS_META[key]) return;
   const st = rankedStreets[selectedStreet];
   focusVar = key; focusT0 = performance.now(); focusT = 0;
+  // build every dataset ONCE per focus session — rebuilding per frame stalls HeatmapLayer
+  const concept = conceptInput.value.trim();
+  const trips = key === 'traffic' ? trafficTrips(st) : null;
+  focusCache = {
+    trips,
+    heatPoints: trips ? trips.flatMap(p => p.path.map(q => ({ p: q }))) : null,
+    rivals: key === 'comp' ? realRivals(st, concept) : null,
+    dots: key === 'students' ? studentDots() : null,
+    tethers: key === 'students' ? UNIS.map(u => ({ s: [u[1], u[0]], d: st.mid })) : null,
+  };
   document.getElementById('why').style.display = 'none';
   const chip = document.getElementById('focusChip');
   chip.style.display = 'flex';
@@ -1317,7 +1495,7 @@ function enterFocus(key) {
   document.getElementById('fcClaim').textContent = `${st.name} · ${FOCUS_META[key].claim}`;
   try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0.28); } catch {}
   const KINDS_BY_VAR = {
-    comp: ['comp', 'icomp'], traffic: ['transit', 'parking', 'night'],
+    comp: [], traffic: ['transit', 'parking', 'night'],   // comp uses real rival dots, not generic chips
     demand: ['resident', 'yelp'], students: ['uni'], spend: [], supply: ['supplier'],
   };
   dropEvidence(evidenceFor(st).filter(e => KINDS_BY_VAR[key].includes(e.kind)));
@@ -1339,7 +1517,7 @@ function enterFocus(key) {
 }
 function exitFocus() {
   if (!focusVar) return;
-  focusVar = null;
+  focusVar = null; focusCache = null;
   if (focusRaf) { cancelAnimationFrame(focusRaf); focusRaf = null; }
   clearEvMarkers();
   try { map.setPaintProperty('scrim-fill', 'fill-opacity', 0); } catch {}
@@ -1380,28 +1558,36 @@ function focusLayers(st) {
   const t = focusT, ease = x => Math.min(1, Math.max(0, x));
   const tick = Math.floor(t * 30);
   const L = [];
-  if (focusVar === 'comp') {
-    const rivals = evidenceFor(st).filter(e => e.kind === 'comp' || e.kind === 'icomp');
+  if (focusVar === 'comp' && focusCache) {
+    const rv = focusCache.rivals;
     L.push(new deck.ScatterplotLayer({
-      id: 'focus-comp', data: rivals,
+      id: 'focus-comp', data: rv.all,
       getPosition: d => [d.lng, d.lat],
       getRadius: 300, radiusUnits: 'meters',
       radiusScale: ease(t / 0.9) * (1 + 0.03 * Math.sin(t * 2)),
       stroked: true, filled: true,
-      getFillColor: [156, 59, 36, 30], getLineColor: [156, 59, 36, 190], lineWidthMinPixels: 1.5,
+      getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 34] : [176, 96, 63, 16],
+      getLineColor: d => rv.direct.includes(d) ? [156, 59, 36, 200] : [176, 96, 63, 110],
+      lineWidthMinPixels: 1.5,
       updateTriggers: { getRadius: [tick] },
     }));
+    L.push(new deck.ScatterplotLayer({
+      id: 'focus-comp-dots', data: rv.all, pickable: true,
+      getPosition: d => [d.lng, d.lat],
+      getRadius: 26, radiusUnits: 'meters',
+      getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 255] : [176, 96, 63, 220],
+      stroked: true, getLineColor: [253, 251, 246, 255], lineWidthMinPixels: 2,
+    }));
   }
-  if (focusVar === 'traffic') {
-    const trips = trafficTrips(st);
+  if (focusVar === 'traffic' && focusCache) {
     L.push(new deck.HeatmapLayer({
-      id: 'focus-heat', data: trips.flatMap(p => p.path.map(q => ({ p: q }))),
+      id: 'focus-heat', data: focusCache.heatPoints,
       getPosition: d => d.p, getWeight: 1, radiusPixels: 45,
       colorRange: [[247,242,233,0],[227,185,138,120],[205,138,86,170],[184,91,35,220],[143,61,20,255],[111,59,31,255]],
-      opacity: ease(t / 0.8) * 0.6,
+      opacity: Math.round(ease(t / 0.8) * 10) / 10 * 0.6,
     }));
     L.push(new deck.TripsLayer({
-      id: 'focus-trips', data: trips,
+      id: 'focus-trips', data: focusCache.trips,
       getPath: d => d.path, getTimestamps: d => d.ts,
       getColor: [184, 91, 35, 255], getWidth: 4, widthUnits: 'pixels',
       capRounded: true, jointRounded: true,
@@ -1423,16 +1609,16 @@ function focusLayers(st) {
       transitions: { getFillColor: 250 },
     }));
   }
-  if (focusVar === 'students') {
+  if (focusVar === 'students' && focusCache) {
     L.push(new deck.LineLayer({
-      id: 'focus-tether', data: UNIS.map(u => ({ s: [u[1], u[0]], d: st.mid })),
+      id: 'focus-tether', data: focusCache.tethers,
       getSourcePosition: d => d.s, getTargetPosition: d => d.d,
       getColor: [63, 85, 115, 160],
       getWidth: 2 + Math.sin(t * 3) * 0.8, widthUnits: 'pixels',
       updateTriggers: { getWidth: [tick] },
     }));
     L.push(new deck.ScatterplotLayer({
-      id: 'focus-students', data: studentDots(),
+      id: 'focus-students', data: focusCache.dots,
       getPosition: d => d.pos, radiusUnits: 'meters',
       getRadius: d => 14 * ease((t - d.delay) / 0.5),
       getFillColor: [63, 85, 115, 200],
@@ -1483,7 +1669,12 @@ function render() {
         }),
         ...focusLayers(st),
       ],
-      getTooltip: () => null,
+      getTooltip: ({ object, layer }) => {
+        if (!object || !layer || layer.id !== 'focus-comp-dots') return null;
+        const stars = object.rating ? ` · ★${(+object.rating).toFixed(1)}` : '';
+        const cui = object.cuisine_key ? ` · ${object.cuisine_key.replace(/_/g, ' ')}` : '';
+        return { text: `${object.name}${cui}${stars}` };
+      },
     });
     return;
   }
