@@ -23,6 +23,10 @@ This plan is derived from the design spec (`docs/superpowers/specs/2026-09-12-fo
 | D13 | Git repo is created and pushed as **task 1** of foundation. Commit after every completed task. |
 | D14 | Toolchain: `uv` provides Python 3.11 (`make venv`), because the pinned wheels do not build on newer interpreters. Colima or Docker Desktop both work as the container runtime. |
 | D15 | The county grid holds 18,275 H3 res-9 cells, not the ~7,000 the proposal estimated. Anything sized against the old number needs revisiting. |
+| D17 | **Phase 3 (Next.js web) is cut.** Replaced by a Streamlit interactive interface — the user asked for "a python runnable web like interactive interface". `web/` stays as it is; the Streamlit app is a separate surface. |
+| D18 | Phase 2 scope is all four parts: core scoring and zones, the LLM features (parse, refine, explain), reverse mode, and the FastAPI endpoints. The Streamlit app calls the endpoints over HTTP rather than importing the scoring modules, so the API is genuinely exercised. |
+| D19 | The Cost sub-score runs at weight 0 and renormalises until hand-collected rents exist. `est_rent_psf_yr` is NULL on every cell and the user has chosen to proceed without it. |
+| D20 | The embedding similarity term is rescaled inside the Competition blend. Measured cosine spans only ~0.69–0.90 after Matryoshka truncation to 1024 dims, so at weight 0.6 it carries ~±0.09 of usable variation against taxonomy's full range. Deferred from Phase 1, owed here. |
 | D16 | Foundation execution runs task-by-task through the plan at `docs/superpowers/plans/2026-09-12-foundation-data-pipeline.md`: one implementer per task, a review after each, findings fixed before the next task starts. |
 
 ## Team Workflow
