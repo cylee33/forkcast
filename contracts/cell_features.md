@@ -9,8 +9,13 @@ farther — e.g. `dist_to_university_km` near its max (~15 km) percentiles near 
 `source` and `resolution` are static, column-level methodology labels (e.g. `est_rent_psf_yr` always
 asserts `zori_manual_regression`), not per-row provenance — they describe the intended pipeline, not what
 actually produced a given row. For rent and traffic, the per-row columns are authoritative instead:
-`rent_source`, `rent_resolution`, `rent_confidence`, and `traffic_source` (all row-level, and any of the
-rent columns may be NULL where no rent part was joined).
+`rent_source`, `rent_resolution`, `rent_confidence`, and `traffic_source` (all row-level; `rent_source`
+and `rent_resolution` may be NULL where no rent part was joined, but `rent_confidence` is always
+present, reading 0.0 when there is no estimate).
+
+`median_hh_income` and `avg_hh_size` may be NULL where the Census could not produce an estimate for
+that block group — this means *no estimate*, not a value of zero, so do not treat it as $0 income or
+0 persons. Their `_pct` companions (`median_hh_income_pct`, `avg_hh_size_pct`) are NULL alongside.
 
 `cell_features.parquet` has no `updated_at` column; that column exists only on the DB `cell_features` table.
 
