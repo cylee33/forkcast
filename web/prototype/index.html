@@ -697,8 +697,13 @@ function nearestFull(lat, lng, maxKm = 0.35) {
   return best;
 }
 
+let GEMINI_CUISINES = [];   // whatever Gemini parsed for the current concept, e.g. ["Japanese","Sushi"]
 function conceptCuisines(concept) {
-  try { return popularityProfile(concept).cuisines.filter(c => c !== 'unknown'); } catch { return []; }
+  try {
+    const text = (concept + ' ' + GEMINI_CUISINES.join(' ')).toLowerCase();
+    const keys = CUISINE_RULES.filter(([needle]) => text.includes(needle)).map(([, k]) => k);
+    return [...new Set(keys)];
+  } catch { return []; }
 }
 function distToPathKm(lat, lng, path) {
   let best = 1e9;
@@ -846,6 +851,8 @@ const CUISINE_RULES = [
   ['mexican', 'mexican'], ['taco', 'mexican'], ['burger', 'american'],
   ['steak', 'steakhouse'], ['seafood', 'seafood'], ['wine', 'wine_bar'],
   ['bar', 'bar'], ['frozen yogurt', 'dessert_ice_cream'], ['dessert', 'dessert_ice_cream'],
+  ['ice cream', 'dessert_ice_cream'], ['gelato', 'dessert_ice_cream'], ['froyo', 'dessert_ice_cream'],
+  ['boba', 'bubble_tea'], ['deli', 'sandwich_deli'], ['sandwich', 'sandwich_deli'], ['bbq', 'bbq'],
   ['bubble tea', 'bubble_tea'], ['brunch', 'breakfast_brunch'], ['vegan', 'vegan'],
 ];
 function popularityProfile(concept) {
@@ -1109,6 +1116,7 @@ Concept: "${text}"` }] }],
 }
 
 function applyGeminiParse(gp) {
+  GEMINI_CUISINES = gp.cuisines || [];
   const wrap = document.getElementById('geminiChips');
   const bits = [
     ...(gp.cuisines || []).map(c => '🍽 ' + c),
@@ -1690,7 +1698,7 @@ function reverseAt(lat, lng) {
 /* ============ reason focus mode — one variable repaints the map ============ */
 let focusVar = null, focusT0 = 0, focusT = 0, focusRaf = null, focusCache = null;
 const FOCUS_META = {
-  comp:     { name: 'Direct competition',  claim: '300 m catchments around each rival — overlaps darken' },
+  comp:     { name: 'Direct competition',  claim: '300 m catchments around each direct rival — overlaps darken' },
   traffic:  { name: 'Foot traffic',        claim: 'pedestrian pulses along the corridor, daypart-weighted' },
   demand:   { name: 'Demand',              claim: 'gravity catchment — blocks colored by local demand' },
   students: { name: 'Student share',       claim: 'each dot ≈ 25 students · tether shows campus pull' },
@@ -1839,22 +1847,22 @@ function focusLayers(st) {
     // made overlapping translucent circles shimmer
     const grow = ease(t / 0.9);
     L.push(new deck.ScatterplotLayer({
-      id: 'focus-comp', data: rv.all,
+      id: 'focus-comp', data: rv.direct,   // direct rivals only — indirect circles read as noise
       getPosition: d => [d.lng, d.lat],
       getRadius: 300, radiusUnits: 'meters',
       radiusScale: grow,
       stroked: true, filled: true,
-      getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 34] : [176, 96, 63, 16],
-      getLineColor: d => rv.direct.includes(d) ? [156, 59, 36, 200] : [176, 96, 63, 110],
+      getFillColor: [156, 59, 36, 34],
+      getLineColor: [156, 59, 36, 200],
       lineWidthMinPixels: 1.5,
       parameters: { depthTest: false },
       updateTriggers: { getRadius: [grow < 1 ? tick : 'settled'] },
     }));
     L.push(new deck.ScatterplotLayer({
-      id: 'focus-comp-dots', data: rv.all, pickable: true,
+      id: 'focus-comp-dots', data: rv.direct, pickable: true,
       getPosition: d => [d.lng, d.lat],
       getRadius: 26, radiusUnits: 'meters',
-      getFillColor: d => rv.direct.includes(d) ? [156, 59, 36, 255] : [176, 96, 63, 220],
+      getFillColor: [156, 59, 36, 255],
       stroked: true, getLineColor: [253, 251, 246, 255], lineWidthMinPixels: 2,
       parameters: { depthTest: false },
     }));
